@@ -4,6 +4,19 @@ Format: [Keep a Changelog](https://keepachangelog.com/). Versions match `<Versio
 `OrbitMesh.Server.csproj`, which is what's reported to the update server (see
 `Services/ServerSelfUpdater.cs` and `Services/UpdateCheckService.cs`).
 
+## [1.2.6] - 2026-08-19
+
+### Fixed
+
+- Self-update's handoff to `OrbitMesh.Updater` (`ServerSelfUpdater.LaunchUpdater`) spawned it via a
+  bare `"dotnet"` command name, relying on `PATH` to resolve it - not guaranteed (`install.sh`'s
+  systemd unit launches the Server itself via `dotnet`'s absolute path precisely because it isn't).
+  On Linux this doesn't fail loudly: `Process.Start` succeeds (`fork()` succeeds), only the child's
+  `exec()` fails, silently, before `OrbitMesh.Updater`'s own code - and its log file - ever run, so
+  the update looked applied but never actually happened. Now uses `Environment.ProcessPath` (the
+  exact `dotnet` running the current process), same fix `RelaunchCommand.Capture()` already uses for
+  the analogous "relaunch myself" problem.
+
 ## [1.2.5] - 2026-08-19
 
 ### Fixed

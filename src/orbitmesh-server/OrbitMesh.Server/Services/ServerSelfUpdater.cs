@@ -107,7 +107,11 @@ public sealed class ServerSelfUpdater(
 
     private static void LaunchUpdater(UpdateOptions updateOptions, UpdateHandoffArgs handoff)
     {
-        var startInfo = new ProcessStartInfo("dotnet") { UseShellExecute = false };
+        // Environment.ProcessPath, not a bare "dotnet" - PATH isn't guaranteed to resolve it (systemd
+        // doesn't set one), and a doomed Process.Start("dotnet") fails silently on Linux.
+        var dotnetPath = Environment.ProcessPath
+            ?? throw new InvalidOperationException("Unable to determine the current process's executable path.");
+        var startInfo = new ProcessStartInfo(dotnetPath) { UseShellExecute = false };
         startInfo.ArgumentList.Add(ResolveUpdaterPath(updateOptions));
         foreach (var arg in handoff.ToArgv())
         {
