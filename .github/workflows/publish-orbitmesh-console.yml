@@ -137,7 +137,7 @@ jobs:
             -H "Authorization: Bearer $TOKEN" \
             -F "zip_file=@$ZIP" \
             -F "changelog=<$RUNNER_TEMP/changelog.txt" \
-            -F "required=false" \
+            -F "required=0" \
             -o "$RUNNER_TEMP/published.json" -w '%{http_code}' \
             "$SERVER/api/$SLUG/releases")
 
