@@ -18,10 +18,12 @@ public static class UpdateVersionComparer
             // Never checked in successfully before - anything reported counts as available.
             return true;
         }
-        // Falls back to a plain string comparison when either side isn't a parseable Version
-        // (e.g. a pre-release suffix) - still correct for the common case, just less precise.
-        return Version.TryParse(current, out var c) && Version.TryParse(latest, out var l)
+        // Strip SemVer build metadata ("+...", e.g. a git sha the SDK can append) before comparing -
+        // it's not significant for version precedence, but would break an exact-match fallback.
+        var currentCore = current.Split('+', 2)[0];
+        var latestCore = latest.Split('+', 2)[0];
+        return Version.TryParse(currentCore, out var c) && Version.TryParse(latestCore, out var l)
             ? l > c
-            : !string.Equals(latest, current, StringComparison.OrdinalIgnoreCase);
+            : !string.Equals(latestCore, currentCore, StringComparison.OrdinalIgnoreCase);
     }
 }

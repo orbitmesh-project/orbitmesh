@@ -4,6 +4,15 @@ Format: [Keep a Changelog](https://keepachangelog.com/). Versions match `<Versio
 `OrbitMesh.Edge.csproj`, which is what's reported to the update server (see
 `Services/EdgeSelfUpdater.cs` and `Services/EdgeUpdateCheckService.cs`).
 
+## [1.1.5]
+
+### Fixed
+
+- `OrbitMesh.Edge.csproj` now sets `IncludeSourceRevisionInInformationalVersion=false` - without
+  it the SDK appends `+<git-sha>` to `EdgeVersion.Current`, which broke `UpdateVersionComparer`'s
+  exact-match fallback (see OrbitMesh.Server's own changelog for the full story) and left "update
+  available" stuck on even right after a successful update.
+
 ## [1.1.4] - 2026-08-19
 
 ### Changed

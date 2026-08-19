@@ -4,6 +4,19 @@ Format: [Keep a Changelog](https://keepachangelog.com/). Versions match `<Versio
 `OrbitMesh.Server.csproj`, which is what's reported to the update server (see
 `Services/ServerSelfUpdater.cs` and `Services/UpdateCheckService.cs`).
 
+## [1.2.7]
+
+### Fixed
+
+- `UpdateVersionComparer.IsNewer` fell back to a plain string comparison when either version wasn't
+  a parseable `System.Version` - the SDK appends `+<git-sha>` (SemVer build metadata) to
+  `AssemblyInformationalVersionAttribute` by default in any build done inside a git working tree
+  (CI included), so the running version never string-matched the clean version the update server
+  reports, and "update available" stuck around forever after a successful update. Now strips the
+  `+...` suffix before comparing, and `OrbitMesh.Server.csproj` sets
+  `IncludeSourceRevisionInInformationalVersion=false` so the suffix isn't there to strip in the
+  first place.
+
 ## [1.2.6] - 2026-08-19
 
 ### Fixed
