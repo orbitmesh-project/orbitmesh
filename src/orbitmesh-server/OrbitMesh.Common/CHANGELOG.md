@@ -4,7 +4,14 @@ Format: [Keep a Changelog](https://keepachangelog.com/). Versions match `<Versio
 `OrbitMesh.Common.csproj`, which is what gets published to
 [nuget.org](https://www.nuget.org/packages/OrbitMesh.Common).
 
-## [Unreleased]
+## [1.2.1] - 2026-08-19
+
+
+### Changed
+
+- `Microsoft.AspNetCore.SignalR.Client`/`Microsoft.Extensions.Http` bumped to 10.0.11.
+
+## [1.2.0] - 2026-08-18
 
 ### Added
 

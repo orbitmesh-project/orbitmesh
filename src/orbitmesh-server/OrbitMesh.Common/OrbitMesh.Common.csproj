@@ -13,7 +13,7 @@
   <PropertyGroup>
     <IsPackable>true</IsPackable>
     <PackageId>OrbitMesh.Common</PackageId>
-    <Version>1.2.0</Version>
+    <Version>1.2.1</Version>
     <Authors>Elie Bertret</Authors>
     <Copyright>Copyright © OrbitMesh</Copyright>
     <Description>The OrbitMesh Package SDK (PackageHost) and shared models - the .NET client library for writing OrbitMesh packages: settings, telemetry, messages and lifecycle for devices connected to an OrbitMesh Server.</Description>
@@ -24,8 +24,8 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.AspNetCore.SignalR.Client" Version="10.0.10" />
-    <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.10" />
+    <PackageReference Include="Microsoft.AspNetCore.SignalR.Client" Version="10.0.11" />
+    <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.11" />
   </ItemGroup>
 
   <ItemGroup>

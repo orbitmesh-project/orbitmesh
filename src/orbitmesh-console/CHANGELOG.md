@@ -3,7 +3,7 @@
 Format: [Keep a Changelog](https://keepachangelog.com/). Versions match the `VERSION` file at
 the root of this project, bumped by `cicd/release-static-site.ps1`.
 
-## [Unreleased]
+## [1.2.3] - 2026-08-18
 
 ### Added
 

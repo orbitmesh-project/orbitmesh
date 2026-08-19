@@ -4,7 +4,14 @@ Format: [Keep a Changelog](https://keepachangelog.com/). Versions match `<Versio
 `OrbitMesh.Edge.csproj`, which is what's reported to the update server (see
 `Services/EdgeSelfUpdater.cs` and `Services/EdgeUpdateCheckService.cs`).
 
-## [Unreleased]
+## [1.1.4] - 2026-08-19
+
+### Changed
+
+- `Microsoft.Extensions.Hosting`/`.Systemd`/`.WindowsServices`/`.Http` bumped to 10.0.11,
+  `NLog.Extensions.Logging` to 6.2.0.
+
+## [1.1.3] - 2026-08-18
 
 ### Added
 

@@ -3,7 +3,7 @@
 Format: [Keep a Changelog](https://keepachangelog.com/). Versions match `<Version>` in
 `OrbitMesh.Updater.csproj`.
 
-## [Unreleased]
+## [1.1.1] - 2026-08-18
 
 ### Changed
 

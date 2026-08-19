@@ -7,15 +7,15 @@
     <UserSecretsId>dotnet-OrbitMesh.Edge-79cfbc5f-9cf9-4a22-9648-e7f505052633</UserSecretsId>
     <!-- Reported to the update server as the "from" version (see Services/EdgeVersion.cs) - bump
          this on every release meant to be offered as a self-update. -->
-    <Version>1.1.3</Version>
+    <Version>1.1.4</Version>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.10" />
-    <PackageReference Include="Microsoft.Extensions.Hosting.Systemd" Version="10.0.10" />
-    <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" Version="10.0.10" />
-    <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.10" />
-    <PackageReference Include="NLog.Extensions.Logging" Version="6.1.4" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.11" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.Systemd" Version="10.0.11" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" Version="10.0.11" />
+    <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.11" />
+    <PackageReference Include="NLog.Extensions.Logging" Version="6.2.0" />
   </ItemGroup>
 
   <ItemGroup>

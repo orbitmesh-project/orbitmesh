@@ -33,7 +33,7 @@ public sealed class NuGetFeedClient(IOptionsMonitor<OrbitMeshOptions> options, M
             {
                 var repository = BuildRepository(feed);
                 var search = await repository.GetResourceAsync<PackageSearchResource>(cancellationToken);
-                var filter = new SearchFilter(includePrerelease) { PackageTypes = [PackageType] };
+                var filter = new SearchFilter(includePrerelease) { PackageType = PackageType };
                 var hits = await search.SearchAsync(searchTerm, filter, skip: 0, take: 100, _nugetLogger, cancellationToken);
                 foreach (var hit in hits)
                 {

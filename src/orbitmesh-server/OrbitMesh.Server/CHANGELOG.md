@@ -4,7 +4,17 @@ Format: [Keep a Changelog](https://keepachangelog.com/). Versions match `<Versio
 `OrbitMesh.Server.csproj`, which is what's reported to the update server (see
 `Services/ServerSelfUpdater.cs` and `Services/UpdateCheckService.cs`).
 
-## [Unreleased]
+## [1.2.5] - 2026-08-19
+
+### Fixed
+
+- Pinned `Microsoft.OpenApi` to 2.12.0 - letting it float to 3.x broke the OpenAPI XML-comment
+  source generator (`IOpenApiMediaType.Example` became read-only there), and 2.3.9 (a prior lower
+  pin) carried a high-severity DoS vulnerability (GHSA-v5pm-xwqc-g5wc, fixed from 2.7.5). Updated
+  `NuGetFeedClient`'s search filter for `NuGet.Protocol` 7.9's `SearchFilter.PackageTypes` ->
+  `PackageType` rename.
+
+## [1.2.4] - 2026-08-18
 
 ### Fixed
 
