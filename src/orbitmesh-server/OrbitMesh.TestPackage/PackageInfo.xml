@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Package Name="TestPackage" Version="1.0.0" Author="Elie"
+         Description="Sanity-check package validating the modernized PackageHost SDK end-to-end"
+         ExecutableFilename="OrbitMesh.TestPackage.dll"
+         Runtime="DotNet"
+         RequestLastTelemetryItemsOnStart="true">
+  <Settings>
+    <Setting name="Greeting" type="String" isRequired="false" defaultValue="Hello from OrbitMesh!" description="Greeting message logged at startup" />
+  </Settings>
+  <Compatibility dotNetTargetPlatform="net10.0" />
+</Package>

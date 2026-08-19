@@ -1,0 +1,163 @@
+name: Publish OrbitMesh Console release
+
+# Builds, signs and publishes an orbitmesh-console release to updates.orbitmesh.org, on a
+# console-v* tag. Uses the update server's Trusted Publishing: GitHub mints an identity token for
+# this workflow, the server exchanges it for a 15-minute publish token scoped to the
+# "orbitmesh-console" project - no stored upload secret.
+#
+# Publishing never promotes a release to latest. Once this run is green, do that by hand on the
+# update server's admin page.
+#
+# Requires a protected environment named `release` (tag policy allowing console-v*), matching
+# what the update server's trusted publisher is pinned to - a run outside it gets no credential
+# at all.
+#
+# Environment secrets:
+#   RELEASE_SIGNING_KEY             the private key (PEM), matching a public key listed in
+#                                    UpdateOptions.publicKeys
+#   RELEASE_SIGNING_KEY_PASSPHRASE  optional, if the key is protected
+
+on:
+  push:
+    tags: ['console-v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write # to mint the identity token, and nothing else
+
+concurrency: publish-orbitmesh-console-${{ github.ref }}
+
+env:
+  SERVER: https://updates.orbitmesh.org
+  SLUG: orbitmesh-console
+  # Not decoration: matches the fix in ci4-updater-server's own publish.yml - the host in front of
+  # the update server answers 403 to a default/curl User-Agent, before the request ever reaches
+  # the application. Send something else and it goes through.
+  UA: 'orbitmesh-publish (+https://github.com/orbitmesh-project/orbitmesh)'
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: release
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Read the version, and check the tag agrees with it
+        id: version
+        run: |
+          set -eu
+          VERSION=$(cat src/orbitmesh-console/VERSION | tr -d '[:space:]')
+          echo "src/orbitmesh-console/VERSION = $VERSION"
+
+          if [ "$GITHUB_REF_TYPE" = tag ] && [ "${GITHUB_REF_NAME#console-v}" != "$VERSION" ]; then
+            echo "::error::tag $GITHUB_REF_NAME does not match VERSION ($VERSION). Bump one of them."
+            exit 1
+          fi
+
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Build and sign the release
+        env:
+          SIGNING_KEY: ${{ secrets.RELEASE_SIGNING_KEY }}
+          SIGNING_KEY_PASSPHRASE: ${{ secrets.RELEASE_SIGNING_KEY_PASSPHRASE }}
+        run: |
+          set -eu
+          if [ -z "${SIGNING_KEY:-}" ]; then
+            echo "::error::RELEASE_SIGNING_KEY is not set. An unsigned release is refused by every install with UpdateOptions.publicKeys configured."
+            exit 1
+          fi
+
+          KEY="$RUNNER_TEMP/release-signing.key"
+          umask 077
+          printf '%s\n' "$SIGNING_KEY" > "$KEY"
+
+          pwsh ./cicd/release-static-site.ps1 -SourceDir src/orbitmesh-console -Slug orbitmesh-console -PrivateKeyPath "$KEY" ${SIGNING_KEY_PASSPHRASE:+-Passphrase "$SIGNING_KEY_PASSPHRASE"}
+
+          rm -f "$KEY"
+
+      - name: Locate the archive, and take the changelog from CHANGELOG.md
+        id: archive
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -eu
+          ZIP="cicd/build/orbitmesh-console-$VERSION.zip"
+          echo "Archive: $ZIP ($(du -h "$ZIP" | cut -f1))"
+
+          awk -v h="## [$VERSION]" 'index($0, h) == 1 { f = 1; next } f && /^## \[/ { exit } f' \
+            src/orbitmesh-console/CHANGELOG.md > "$RUNNER_TEMP/changelog.txt"
+
+          if [ ! -s "$RUNNER_TEMP/changelog.txt" ]; then
+            echo "::warning::No section '## [$VERSION]' in orbitmesh-console/CHANGELOG.md - publishing without a changelog."
+          fi
+
+          echo "zip=$ZIP" >> "$GITHUB_OUTPUT"
+
+      - name: Exchange the GitHub identity for a publish token
+        id: auth
+        run: |
+          set -eu
+          OIDC=$(curl -sS -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=$SERVER" | jq -r .value)
+
+          if [ -z "$OIDC" ] || [ "$OIDC" = null ]; then
+            echo "::error::GitHub minted no identity token - check that the job has id-token: write."
+            exit 1
+          fi
+
+          # Status and body kept apart, so a refusal shows what the server actually said - piping
+          # curl straight into jq turns every failure into a parse error and loses the message.
+          STATUS=$(curl -sS -X POST -A "$UA" \
+            -H "Authorization: Bearer $OIDC" \
+            -o "$RUNNER_TEMP/mint.json" -w '%{http_code}' \
+            "$SERVER/api/$SLUG/publish/token")
+
+          if [ "$STATUS" != 200 ]; then
+            echo "::error::the server refused to mint a publish token (HTTP $STATUS)"
+            cat "$RUNNER_TEMP/mint.json"
+            echo
+            exit 1
+          fi
+
+          TOKEN=$(jq -r .token < "$RUNNER_TEMP/mint.json")
+          rm -f "$RUNNER_TEMP/mint.json"
+
+          echo "::add-mask::$TOKEN"
+          echo "token=$TOKEN" >> "$GITHUB_OUTPUT"
+
+      - name: Publish
+        env:
+          TOKEN: ${{ steps.auth.outputs.token }}
+          ZIP: ${{ steps.archive.outputs.zip }}
+        run: |
+          set -eu
+          STATUS=$(curl -sS -X POST -A "$UA" \
+            -H "Authorization: Bearer $TOKEN" \
+            -F "zip_file=@$ZIP" \
+            -F "changelog=<$RUNNER_TEMP/changelog.txt" \
+            -F "required=false" \
+            -o "$RUNNER_TEMP/published.json" -w '%{http_code}' \
+            "$SERVER/api/$SLUG/releases")
+
+          cat "$RUNNER_TEMP/published.json"
+          echo
+
+          if [ "$STATUS" != 201 ]; then
+            echo "::error::publishing failed (HTTP $STATUS)"
+            exit 1
+          fi
+
+      - name: Summary
+        if: success()
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          {
+            echo "### Published orbitmesh-console $VERSION"
+            echo
+            echo "Latest: no - promote it on the update server's admin page."
+            echo
+            echo "[$SERVER/admin]($SERVER/admin)"
+          } >> "$GITHUB_STEP_SUMMARY"

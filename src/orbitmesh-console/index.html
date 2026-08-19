@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OrbitMesh Console v2</title>
+<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="Libs/codemirror/codemirror.css">
+<link rel="stylesheet" href="Libs/codemirror/codemirror-twilight.css">
+<!-- Applied synchronously (not from app.js, which is a deferred module) so the page never flashes
+     the wrong theme for a frame before Vue mounts. -->
+<script>document.documentElement.dataset.theme = localStorage.getItem("theme_v2") || "dark";</script>
+</head>
+<body>
+<div id="app"></div>
+
+<!-- Vendored, not CDN-fetched at runtime - the console must keep working on a LAN with no
+     internet access, same reasoning as every other script in this project. -->
+<script src="Libs/vue/vue.global.prod.js"></script>
+<script src="Libs/vue/vue-router.global.prod.js"></script>
+<script src="Libs/microsoft-signalr/signalr.min.js"></script>
+<script src="Libs/codemirror/codemirror.js"></script>
+<script src="Libs/codemirror/modes/javascript.js"></script>
+<script src="Libs/codemirror/modes/xml.js"></script>
+<script type="module" src="Scripts/app.js"></script>
+</body>
+</html>

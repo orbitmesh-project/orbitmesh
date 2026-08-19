@@ -1,0 +1,41 @@
+name: Publish OrbitMesh.Common to nuget.org
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "src/orbitmesh-server/OrbitMesh.Common/**"
+      - ".github/workflows/publish-nuget-common.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: src/orbitmesh-server/OrbitMesh.Common
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - run: dotnet pack -c Release -o out
+
+      # OIDC -> short-lived nuget.org API key, no long-lived secret to store/rotate. Requires a
+      # Trusted Publishing policy on nuget.org: Repository Owner "orbitmesh-project", Repository
+      # "orbitmesh", Workflow File "publish-nuget-common.yml" (filename only).
+      - name: NuGet login (OIDC -> temp API key)
+        uses: NuGet/login@v1
+        id: login
+        with:
+          user: ${{ secrets.NUGET_USER }}
+
+      # --skip-duplicate: this triggers on every push touching OrbitMesh.Common, not just version
+      # bumps - a push that didn't change <Version> just no-ops here instead of failing the job.
+      - run: dotnet nuget push out/*.nupkg --api-key ${{ steps.login.outputs.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate

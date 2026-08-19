@@ -1,0 +1,38 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <!-- Reported to the console and to the update server (see Services/UpdateCheckService.cs) -
+         bump this on every release meant to be offered as a self-update. -->
+    <Version>1.2.4</Version>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.10" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.Systemd" Version="10.0.10" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" Version="10.0.10" />
+    <PackageReference Include="Microsoft.OpenApi" Version="2.11.0" />
+    <PackageReference Include="NLog.Extensions.Logging" Version="6.1.4" />
+    <PackageReference Include="NuGet.Protocol" Version="7.6.0" />
+    <PackageReference Include="OpenTelemetry.Exporter.Prometheus.AspNetCore" Version="1.17.0-beta.1" />
+    <PackageReference Include="OpenTelemetry.Extensions.Hosting" Version="1.17.0" />
+    <PackageReference Include="OpenTelemetry.Instrumentation.AspNetCore" Version="1.17.0" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\OrbitMesh.Common\OrbitMesh.Common.csproj" />
+  </ItemGroup>
+  <!-- InMemoryTelemetryItemProvider writes TelemetryItemsSnapshot.json next to the running app
+       (ContentRootPath) at runtime - a leftover copy from a local run sits in this project
+       directory, and the SDK's implicit content globbing would otherwise ship it as part of
+       every build/publish, overwriting whatever a real deployment has accumulated. -->
+  <ItemGroup>
+    <Content Remove="TelemetryItemsSnapshot.json" />
+    <None Remove="TelemetryItemsSnapshot.json" />
+  </ItemGroup>
+  <!-- packages/ (PackagesRootDirectory's default) holds runtime package data, not release content -
+       same reasoning as TelemetryItemsSnapshot.json above. -->
+  <ItemGroup>
+    <Content Remove="packages\**" />
+    <None Remove="packages\**" />
+  </ItemGroup>
+</Project>

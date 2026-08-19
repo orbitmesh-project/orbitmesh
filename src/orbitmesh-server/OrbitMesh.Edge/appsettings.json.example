@@ -1,0 +1,23 @@
+{
+  "Logging": {
+    "LogLevel": {
+      "Default": "Information",
+      "Microsoft.Hosting.Lifetime": "Information"
+    }
+  },
+  "Edge": {
+    "OrbitMeshServerUri": "http://localhost:8088",
+    "OrbitMeshAccessKey": "REPLACE_WITH_THIS_EDGE_S_CREDENTIAL_ACCESS_KEY",
+    "LocalPackagesDirectory": "Packages",
+    "EdgeName": null,
+    "ReportPackageUsageIntervalMs": 1000,
+    "ShutdownPackageTimeoutMs": 10000,
+    "UpdateOptions": {
+      "serverUrl": "https://updates.orbitmesh.org",
+      "projectSlug": "orbitmesh-edge",
+      "token": null,
+      "checkIntervalMinutes": 60,
+      "publicKeys": [ "-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAqNU78UjlPKzWjCHkllAI\nBimgx61ipo7mfb3ytLXd0sZZ9qTNs0IZBDsNY+Nm/tXAQvO0otEslMavj+sCUN6E\nt58wMRVVvqb29QVBQ5JlKkBQzeJTTM3tFADdbbJBq0Aer+wDo79ahTvojkaE8oTn\nlqT8A+YrUoO0cCu6AH9fOflg51v5jhkJTBNre2W1T2nFXgJ0WWRgMgjY6N7MZ56F\n+zwGn7fRPpMx/G7izvVtJ8HMBZjHNxFdXIB1ieVlRAxnm7k5hmziQ1hzTw0N1re0\naoAdc/x4FsYwqG2eaJuBtboAOVG3X8Q8zKimx3bdZEpMIxAAZ/KJpX0GXEygQbqJ\n6QIDAQAB\n-----END PUBLIC KEY-----" ]
+    }
+  }
+}

@@ -1,0 +1,17 @@
+bin/
+obj/
+Logs/
+*.log
+TelemetryItemsSnapshot.json
+OrbitMesh.Server/packages/
+OrbitMesh.Edge/Packages/
+
+# Real, secret-bearing, runtime-mutated config - never committed. Copy the matching
+# appsettings.json.example to appsettings.json and fill it in for a real deployment.
+appsettings.json
+appsettings.json.bak
+!appsettings.json.example
+
+# AES key generated per-install by AccessKeyCipher on first run (OrbitMesh.Server/Services/AccessKeyCipher.cs) -
+# decrypts Machine credentials' AccessKey in appsettings.json, so it must never be committed alongside it.
+OrbitMesh.Server/keys/

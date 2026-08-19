@@ -1,0 +1,7 @@
+<Solution>
+  <Project Path="OrbitMesh.Common/OrbitMesh.Common.csproj" />
+  <Project Path="OrbitMesh.Edge/OrbitMesh.Edge.csproj" />
+  <Project Path="OrbitMesh.Server/OrbitMesh.Server.csproj" />
+  <Project Path="OrbitMesh.TestPackage/OrbitMesh.TestPackage.csproj" />
+  <Project Path="OrbitMesh.Updater/OrbitMesh.Updater.csproj" />
+</Solution>
