@@ -3,6 +3,17 @@
 Format: [Keep a Changelog](https://keepachangelog.com/). Versions match the `VERSION` file at
 the root of this project, bumped by `cicd/release-static-site.ps1`.
 
+## [1.2.4] - 2026-08-19
+
+### Changed
+
+- Nav menu regrouped into dropdowns: Edges/Packages/Variables under a new "Fleet" group,
+  Repository/Credentials/Configuration under a new "Administration" group - flattens what had
+  grown into 10 top-level links down to Home, Telemetry, Messages, Console log, Fleet,
+  Administration. Both group labels are non-navigating hover triggers (pure CSS, no new state),
+  so clicking behaves the same for every group; each stays highlighted while any of its
+  sub-pages is the active route.
+
 ## [1.2.3] - 2026-08-18
 
 ### Added

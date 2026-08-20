@@ -16,6 +16,12 @@ const App = {
     computed: {
         updateCount() {
             return Object.keys(this.store.componentUpdates).length;
+        },
+        fleetGroupActive() {
+            return ["/edges", "/packages", "/variables"].includes(this.$route.path);
+        },
+        administrationGroupActive() {
+            return ["/repository", "/credentials", "/configuration"].includes(this.$route.path);
         }
     },
     methods: {
@@ -45,15 +51,25 @@ const App = {
                 <span class="badge" :class="store.connectionState.toLowerCase()">{{ store.connectionState }}</span>
                 <nav v-if="store.isLoggedIn">
                     <router-link to="/">Home</router-link>
-                    <router-link to="/edges">Edges</router-link>
-                    <router-link to="/packages">Packages</router-link>
-                    <router-link to="/variables">Variables</router-link>
                     <router-link to="/telemetry">Telemetry</router-link>
                     <router-link to="/messages">Messages</router-link>
                     <router-link to="/console">Console log<span v-if="store.unreadErrorCount > 0" class="nav-badge">{{ store.unreadErrorCount }}</span></router-link>
-                    <router-link to="/repository">Repository</router-link>
-                    <router-link to="/credentials">Credentials</router-link>
-                    <router-link to="/configuration">Configuration</router-link>
+                    <div class="nav-group" :class="{ 'router-link-active': fleetGroupActive }">
+                        <span class="nav-group-label">Fleet</span>
+                        <div class="nav-dropdown">
+                            <router-link to="/edges">Edges</router-link>
+                            <router-link to="/packages">Packages</router-link>
+                            <router-link to="/variables">Variables</router-link>
+                        </div>
+                    </div>
+                    <div class="nav-group" :class="{ 'router-link-active': administrationGroupActive }">
+                        <span class="nav-group-label">Administration</span>
+                        <div class="nav-dropdown">
+                            <router-link to="/repository">Repository</router-link>
+                            <router-link to="/credentials">Credentials</router-link>
+                            <router-link to="/configuration">Configuration</router-link>
+                        </div>
+                    </div>
                 </nav>
                 <div class="header-actions">
                     <div v-if="store.isLoggedIn && store.managementAvailable" class="update-bell">
