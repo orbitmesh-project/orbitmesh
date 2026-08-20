@@ -4,6 +4,42 @@ Format: [Keep a Changelog](https://keepachangelog.com/). Versions match `<Versio
 `OrbitMesh.Server.csproj`, which is what's reported to the update server (see
 `Services/ServerSelfUpdater.cs` and `Services/UpdateCheckService.cs`).
 
+## [1.2.9] - 2026-08-20
+
+### Security
+
+- `PackageFileMiddleware` (`/packages/{file}`) stripped `".."` from the requested path but didn't
+  reject a rooted one - `Path.Combine(root, relativePath)` discards `root` entirely when
+  `relativePath` is itself rooted (e.g. `C:/...`), and colons are valid unencoded characters in a
+  URL path segment, so `GET /packages/C:/OrbitMesh/keys/credential-encryption.key` reached the
+  filesystem unmangled. This route only requires the lowest access tier (any Edge/package
+  credential, not admin), so any registered Edge could read arbitrary files readable by the server
+  process - including the AES key that decrypts every Machine credential's AccessKey. Fixed with
+  the same containment check already used by `PackageInstance.ResolveContained` on the Edge side:
+  canonicalize with `Path.GetFullPath` and reject anything that doesn't resolve inside the packages
+  root directory.
+
+- `ManagementController.ResolveZipPath` had the same rooted-path gap as above, reachable by any
+  `packages:deploy`-scoped credential (not full admin) - `RenamePackageFile`'s body-supplied
+  `NewName` and a NuGet-install's manifest-supplied package name could move/read/delete an arbitrary
+  `.zip` file outside `PackagesRootDirectory`. Replaced with `TryResolveZipPath`, applying the same
+  containment check at every call site (`GetPackage`, `RenamePackageFile`, `RemovePackageFile`,
+  `GetPackageIcon`, `GetSettingXsdSchema`, `InstallFromNuGet`, `DownloadPackage`,
+  `ValidateJsonAndXmlSettings`).
+
+- `InstallFromNuGet` extracted a downloaded `.nupkg`'s `content/` entries via
+  `ZipArchiveEntry.ExtractToFile` directly, which (unlike `ZipFile.ExtractToDirectory`) has no
+  zip-slip protection of its own - a crafted entry name (`content/../../../foo`) could write outside
+  the temp extraction directory before the manifest was ever validated. Now checks each entry's
+  resolved destination stays within the temp directory and rejects the whole install otherwise.
+
+- `DownloadPackage` fetched an admin-supplied `request.Url` server-side with no restriction - a
+  `packages:deploy`-scoped credential could make the server issue requests to internal-only
+  addresses or cloud instance-metadata endpoints (`169.254.169.254`) it can reach but the caller
+  can't (blind SSRF). Now resolves the host and rejects loopback/link-local/private ranges before
+  connecting, and disables automatic redirects (a passed check could otherwise be defeated by a 30x
+  to an internal address).
+
 ## [1.2.8] - 2026-08-19
 
 ### Fixed

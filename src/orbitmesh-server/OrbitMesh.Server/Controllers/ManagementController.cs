@@ -1,4 +1,6 @@
 using System.IO.Compression;
+using System.Net;
+using System.Net.Sockets;
 using System.Security.Cryptography;
 using OrbitMesh;
 using OrbitMesh.Deployment;
@@ -513,7 +515,10 @@ public sealed class ManagementController(
     // "0" stands in for a "{Variable}" token, valid JSON whether it sits bare or inside quotes.
     private string? ValidateJsonAndXmlSettings(PackageOptions package, Dictionary<string, string> settings)
     {
-        var zipPath = ResolveZipPath(package.PackageFile ?? package.Name);
+        if (!TryResolveZipPath(package.PackageFile ?? package.Name, out var zipPath))
+        {
+            return null;
+        }
         var manifest = System.IO.File.Exists(zipPath) ? PackageZipHelper.GetManifest(zipPath) : null;
         if (manifest == null)
         {
@@ -765,7 +770,10 @@ public sealed class ManagementController(
     [RequiresScope(OrbitMeshScope.PackagesDeploy)]
     public ActionResult<object> GetPackage(string package)
     {
-        var path = ResolveZipPath(package);
+        if (!TryResolveZipPath(package, out var path))
+        {
+            return NotFound();
+        }
         return System.IO.File.Exists(path) ? BuildPackageRepositoryEntry(path) : NotFound();
     }
 
@@ -821,7 +829,14 @@ public sealed class ManagementController(
                             continue;
                         }
                         var relative = entry.FullName["content/".Length..];
-                        var destination = Path.Combine(tempContentDir, relative);
+                        // ExtractToFile has no zip-slip protection of its own (unlike ZipFile.ExtractToDirectory,
+                        // which we can't use here since only "content/" entries are wanted) - a crafted entry
+                        // like "content/../../../foo" would otherwise write outside tempContentDir.
+                        var destination = Path.GetFullPath(Path.Combine(tempContentDir, relative));
+                        if (!IsWithin(tempContentDir, destination))
+                        {
+                            return BadRequest($"'{request.Id}' {request.Version} contains an unsafe archive entry ('{entry.FullName}') and was not installed.");
+                        }
                         Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
                         entry.ExtractToFile(destination, overwrite: true);
                     }
@@ -829,7 +844,10 @@ public sealed class ManagementController(
 
                 var manifest = OrbitMesh.Deployment.PackageManifestHelper.GetPackageManifestFromDirectory(tempContentDir, throwException: false);
                 var packageName = manifest?.Name ?? request.Id;
-                var zipPath = ResolveZipPath(packageName);
+                if (!TryResolveZipPath(packageName, out var zipPath))
+                {
+                    return BadRequest($"'{packageName}' is not a valid package name.");
+                }
                 Directory.CreateDirectory(Path.GetDirectoryName(zipPath)!);
                 if (System.IO.File.Exists(zipPath))
                 {
@@ -904,8 +922,78 @@ public sealed class ManagementController(
 
     private static string ResolveZipFilename(string name) => name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase) ? name : name + ".zip";
 
-    private string ResolveZipPath(string package) =>
-        Path.Combine(Path.GetFullPath(options.CurrentValue.PackagesRootDirectory), ResolveZipFilename(package));
+    // `package`/`request.NewName` ultimately come from a Management-API caller and aren't validated
+    // for path-traversal characters upstream - a rooted value (e.g. "C:/Windows/..." or "/etc/...")
+    // would otherwise make Path.Combine ignore PackagesRootDirectory entirely and resolve outside it.
+    // Same containment pattern as OrbitMesh.Edge's PackageInstance.ResolveContained.
+    private bool TryResolveZipPath(string package, out string path)
+    {
+        var root = Path.GetFullPath(options.CurrentValue.PackagesRootDirectory);
+        var candidate = Path.GetFullPath(Path.Combine(root, ResolveZipFilename(package)));
+        if (!IsWithin(root, candidate))
+        {
+            path = string.Empty;
+            return false;
+        }
+        path = candidate;
+        return true;
+    }
+
+    private static bool IsWithin(string root, string candidate)
+    {
+        var rootWithSeparator = root.EndsWith(Path.DirectorySeparatorChar) ? root : root + Path.DirectorySeparatorChar;
+        return candidate == root || candidate.StartsWith(rootWithSeparator, StringComparison.Ordinal);
+    }
+
+    // Blocks server-side request forgery via DownloadPackage's caller-supplied URL: resolves the host
+    // and rejects it if any resolved address is loopback/link-local/private - link-local specifically
+    // covers cloud instance-metadata endpoints (169.254.169.254) that would otherwise hand out
+    // credentials to whatever asks. DNS resolution (not just a literal-IP check) matters because a
+    // hostname can resolve to an internal address just as easily as a literal one can be typed.
+    private static async Task<bool> IsPubliclyRoutableUrlAsync(Uri uri)
+    {
+        if (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps)
+        {
+            return false;
+        }
+        IPAddress[] addresses;
+        try
+        {
+            addresses = IPAddress.TryParse(uri.Host, out var literal) ? [literal] : await Dns.GetHostAddressesAsync(uri.Host);
+        }
+        catch
+        {
+            return false;
+        }
+        return addresses.Length > 0 && Array.TrueForAll(addresses, IsPublicAddress);
+    }
+
+    private static bool IsPublicAddress(IPAddress address)
+    {
+        if (address.IsIPv4MappedToIPv6)
+        {
+            address = address.MapToIPv4();
+        }
+        if (IPAddress.IsLoopback(address) || address.IsIPv6LinkLocal || address.IsIPv6SiteLocal || address.IsIPv6Multicast)
+        {
+            return false;
+        }
+        if (address.AddressFamily != AddressFamily.InterNetwork)
+        {
+            return true;
+        }
+        var b = address.GetAddressBytes();
+        return b[0] switch
+        {
+            0 => false,       // 0.0.0.0/8
+            10 => false,      // 10.0.0.0/8
+            127 => false,     // 127.0.0.0/8 (loopback, redundant with IsLoopback above)
+            169 => b[1] != 254, // 169.254.0.0/16 (link-local, incl. cloud instance metadata)
+            172 => b[1] is < 16 or > 31, // 172.16.0.0/12
+            192 => b[1] != 168, // 192.168.0.0/16
+            _ => true
+        };
+    }
 
     private static object BuildPackageRepositoryEntry(string filePath)
     {
@@ -947,12 +1035,15 @@ public sealed class ManagementController(
     [RequiresScope(OrbitMeshScope.PackagesDeploy)]
     public IActionResult RenamePackageFile(string package, [FromBody] RenamePackageRequest request)
     {
-        var fromPath = ResolveZipPath(package);
-        if (!System.IO.File.Exists(fromPath))
+        if (!TryResolveZipPath(package, out var fromPath) || !System.IO.File.Exists(fromPath))
         {
             return NotFound($"Package '{package}' not found");
         }
-        System.IO.File.Move(fromPath, ResolveZipPath(request.NewName));
+        if (!TryResolveZipPath(request.NewName, out var toPath))
+        {
+            return BadRequest($"'{request.NewName}' is not a valid package name.");
+        }
+        System.IO.File.Move(fromPath, toPath);
         return Ok();
     }
 
@@ -965,8 +1056,7 @@ public sealed class ManagementController(
     [RequiresScope(OrbitMeshScope.PackagesDeploy)]
     public IActionResult RemovePackageFile(string package)
     {
-        var path = ResolveZipPath(package);
-        if (!System.IO.File.Exists(path))
+        if (!TryResolveZipPath(package, out var path) || !System.IO.File.Exists(path))
         {
             return NotFound();
         }
@@ -978,7 +1068,10 @@ public sealed class ManagementController(
     [RequiresScope(OrbitMeshScope.PackagesRead, OrbitMeshScope.PackagesDeploy)]
     public IActionResult GetPackageIcon(string package)
     {
-        var path = ResolveZipPath(package);
+        if (!TryResolveZipPath(package, out var path))
+        {
+            return NotFound();
+        }
         var manifest = System.IO.File.Exists(path) ? PackageZipHelper.GetManifest(path) : null;
         var iconBytes = !string.IsNullOrEmpty(manifest?.Icon) ? PackageZipHelper.GetEntryContent(path, manifest.Icon) : null;
         return iconBytes != null ? File(iconBytes, "image/png") : NotFound();
@@ -988,7 +1081,10 @@ public sealed class ManagementController(
     [RequiresScope(OrbitMeshScope.PackagesRead)]
     public IActionResult GetSettingXsdSchema(string package, string settingName)
     {
-        var path = ResolveZipPath(package);
+        if (!TryResolveZipPath(package, out var path))
+        {
+            return NotFound();
+        }
         var manifest = System.IO.File.Exists(path) ? PackageZipHelper.GetManifest(path) : null;
         var setting = manifest?.Settings.FirstOrDefault(s => s.Name.Equals(settingName, StringComparison.OrdinalIgnoreCase));
         var content = !string.IsNullOrEmpty(setting?.SchemaXSD) ? PackageZipHelper.GetEntryContent(path, setting.SchemaXSD) : null;
@@ -999,13 +1095,27 @@ public sealed class ManagementController(
     [RequiresScope(OrbitMeshScope.PackagesDeploy)]
     public async Task<IActionResult> DownloadPackage([FromServices] IHttpClientFactory httpClientFactory, [FromBody] DownloadPackageRequest request)
     {
+        if (!Uri.TryCreate(request.Url, UriKind.Absolute, out var uri) || !await IsPubliclyRoutableUrlAsync(uri))
+        {
+            return BadRequest("The URL must be a public http/https address (not loopback, link-local, or a private network range).");
+        }
+
         var tempFile = Path.GetTempFileName();
         try
         {
-            var client = httpClientFactory.CreateClient();
-            await using (var stream = await client.GetStreamAsync(request.Url))
-            await using (var file = System.IO.File.Create(tempFile))
+            // AllowAutoRedirect disabled deliberately: a server that passes the check above could still
+            // 30x to an internal/loopback address, and following that would defeat it (classic SSRF
+            // redirect bypass) - a redirect is just treated as a failed download instead of chased.
+            using var handler = new HttpClientHandler { AllowAutoRedirect = false };
+            using var client = new HttpClient(handler);
+            using (var response = await client.GetAsync(uri))
             {
+                if (!response.IsSuccessStatusCode)
+                {
+                    return StatusCode((int)response.StatusCode, $"Failed to download the package ({(int)response.StatusCode}).");
+                }
+                await using var stream = await response.Content.ReadAsStreamAsync();
+                await using var file = System.IO.File.Create(tempFile);
                 await stream.CopyToAsync(file);
             }
             var manifest = PackageZipHelper.GetManifest(tempFile);
@@ -1014,9 +1124,12 @@ public sealed class ManagementController(
                 System.IO.File.Delete(tempFile);
                 return UnprocessableEntity("No PackageInfo.xml manifest found in this package.");
             }
-            var dir = Path.GetFullPath(options.CurrentValue.PackagesRootDirectory);
-            Directory.CreateDirectory(dir);
-            var destination = Path.Combine(dir, $"{manifest.Name}.zip");
+            if (!TryResolveZipPath(manifest.Name, out var destination))
+            {
+                System.IO.File.Delete(tempFile);
+                return BadRequest($"'{manifest.Name}' is not a valid package name.");
+            }
+            Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
             if (System.IO.File.Exists(destination))
             {
                 System.IO.File.Delete(destination);

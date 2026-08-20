@@ -18,8 +18,21 @@ public sealed class PackageFileMiddleware(RequestDelegate next, ILogger<PackageF
             return;
         }
 
-        var relativePath = remaining.Value?.TrimStart('/').Replace("..", string.Empty) ?? string.Empty;
-        var fullPath = Path.Combine(Path.GetFullPath(options.CurrentValue.PackagesRootDirectory), relativePath);
+        var relativePath = remaining.Value?.TrimStart('/') ?? string.Empty;
+        var root = Path.GetFullPath(options.CurrentValue.PackagesRootDirectory);
+        // Path.Combine ignores `root` entirely when relativePath is itself rooted (e.g. "C:/..." or
+        // a leading "/"/"\") - stripping ".." alone doesn't stop that. GetFullPath + a contained-in-root
+        // check afterward is required, same pattern as PackageInstance.ResolveContained on the Edge side.
+        var fullPath = Path.GetFullPath(Path.Combine(root, relativePath));
+        var rootWithSeparator = root.EndsWith(Path.DirectorySeparatorChar) ? root : root + Path.DirectorySeparatorChar;
+
+        if (fullPath != root && !fullPath.StartsWith(rootWithSeparator, StringComparison.Ordinal))
+        {
+            logger.LogWarning("Rejected package request outside the packages root: {Path} (resolved to {LocalPath})", context.Request.Path, fullPath);
+            context.Response.StatusCode = StatusCodes.Status404NotFound;
+            await context.Response.WriteAsync("Package not found");
+            return;
+        }
 
         if (!File.Exists(fullPath))
         {
