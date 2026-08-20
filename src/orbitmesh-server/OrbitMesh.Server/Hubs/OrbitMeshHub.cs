@@ -15,6 +15,7 @@ public sealed class OrbitMeshHub(
     OrbitMeshLogService packageLog,
     IHubContext<ConsumerHub> consumerHub,
     IHubContext<ControlHub> controlHub,
+    CredentialUsageTracker usageTracker,
     ILogger<OrbitMeshHub> logger) : Hub
 {
     public override async Task OnConnectedAsync()
@@ -32,6 +33,7 @@ public sealed class OrbitMeshHub(
         }
         metrics.AccessGranted();
         metrics.PackageConnected();
+        usageTracker.RecordUse(directory.GetCredentialName(Context.GetAccessKey()));
 
         var edgeName = Context.GetEdgeName()!;
         var packageName = Context.GetPackageName()!;

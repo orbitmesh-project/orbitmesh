@@ -12,6 +12,7 @@ public sealed class ConsumerHub(
     OrbitMeshMetrics metrics,
     IHubContext<OrbitMeshHub> orbitmeshHub,
     IHubContext<ConsumerHub> selfHub,
+    CredentialUsageTracker usageTracker,
     ILogger<ConsumerHub> logger) : Hub
 {
     public override Task OnConnectedAsync()
@@ -26,6 +27,7 @@ public sealed class ConsumerHub(
         }
         metrics.AccessGranted();
         metrics.ConsumerConnected();
+        usageTracker.RecordUse(directory.GetCredentialName(Context.GetAccessKey()));
         return base.OnConnectedAsync();
     }
 

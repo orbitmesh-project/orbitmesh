@@ -169,16 +169,28 @@ public sealed class ServerSelfUpdater(
         {
             var relative = Path.GetRelativePath(liveDir, packagesDir);
             var destination = Path.Combine(stagingDir, relative);
-            var destinationParent = Path.GetDirectoryName(destination);
-            if (!string.IsNullOrEmpty(destinationParent))
-            {
-                Directory.CreateDirectory(destinationParent);
-            }
             if (Directory.Exists(destination))
             {
                 Directory.Delete(destination, recursive: true);
             }
-            Directory.Move(packagesDir, destination);
+            // Copy, not move: liveDir must still have its real packages/ if anything between here and
+            // a successful swap goes wrong (this OS process killed, the Updater killed before it can
+            // swap, ...) - a retry's "wipe any leftover staging dir" start-over would otherwise take
+            // the only copy down with it.
+            CopyDirectoryRecursive(packagesDir, destination);
+        }
+    }
+
+    private static void CopyDirectoryRecursive(string sourceDir, string destinationDir)
+    {
+        Directory.CreateDirectory(destinationDir);
+        foreach (var file in Directory.GetFiles(sourceDir))
+        {
+            File.Copy(file, Path.Combine(destinationDir, Path.GetFileName(file)), overwrite: true);
+        }
+        foreach (var subDir in Directory.GetDirectories(sourceDir))
+        {
+            CopyDirectoryRecursive(subDir, Path.Combine(destinationDir, Path.GetFileName(subDir)));
         }
     }
 

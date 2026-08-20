@@ -13,6 +13,7 @@ public sealed class ControlHub(
     IHubContext<EdgeHub> edgeHub,
     IHubContext<OrbitMeshHub> orbitmeshHub,
     OrbitMeshLogService packageLog,
+    CredentialUsageTracker usageTracker,
     ILogger<ControlHub> logger) : Hub
 {
     public const string LogsGroup = "ControlLogs";
@@ -31,6 +32,7 @@ public sealed class ControlHub(
             Context.Abort();
             return Task.CompletedTask;
         }
+        usageTracker.RecordUse(directory.GetCredentialName(Context.GetAccessKey()));
         return base.OnConnectedAsync();
     }
 

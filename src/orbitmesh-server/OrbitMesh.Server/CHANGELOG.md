@@ -4,7 +4,24 @@ Format: [Keep a Changelog](https://keepachangelog.com/). Versions match `<Versio
 `OrbitMesh.Server.csproj`, which is what's reported to the update server (see
 `Services/ServerSelfUpdater.cs` and `Services/UpdateCheckService.cs`).
 
-## [1.2.7]
+## [1.2.8] - 2026-08-19
+
+### Fixed
+
+- `PreserveLiveState` moved `packages/` into the staging directory instead of copying it, before the
+  handoff to `OrbitMesh.Updater` even succeeds - if anything went wrong between that move and a
+  completed swap (the Updater killed before it could run, this process crashing, ...), the only copy
+  was left stranded in an abandoned staging directory, which `ApplyAsync`'s next attempt deletes
+  outright as its own "start clean" first step. Now copies, matching `appsettings.json`/`keys/` -
+  the live directory keeps its real `packages/` until a swap actually completes.
+
+- `CredentialUsageTracker.RecordUse` was only ever called from `AccessKeyAuthenticationMiddleware`
+  (the REST gate) - packages, Edges, the Console, and Consumers all authenticate over SignalR, not
+  REST, so their credentials' "Last Used" stayed "Never" forever. Now also recorded from each Hub's
+  `OnConnectedAsync` (`OrbitMeshHub`, `EdgeHub`, `ControlHub`, `ConsumerHub`) right after their
+  existing access check succeeds.
+
+## [1.2.7] - 2026-08-19
 
 ### Fixed
 

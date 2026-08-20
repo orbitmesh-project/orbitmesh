@@ -13,6 +13,7 @@ public sealed class EdgeHub(
     OrbitMeshMetrics metrics,
     OrbitMeshLogService packageLog,
     IHubContext<ControlHub> controlHub,
+    CredentialUsageTracker usageTracker,
     ILogger<EdgeHub> logger) : Hub
 {
     private bool IsAuthorized() =>
@@ -30,6 +31,7 @@ public sealed class EdgeHub(
             }
             metrics.AccessGranted();
             metrics.EdgeConnected();
+            usageTracker.RecordUse(directory.GetCredentialName(Context.GetAccessKey()));
             packageLog.Log(Context.GetEdgeName(), Context.GetPackageName(),
                 $"Edge connected to server (connectionId='{Context.ConnectionId}')",
                 LogLevel.Info);
