@@ -3,6 +3,14 @@
 Format: [Keep a Changelog](https://keepachangelog.com/). Versions match the `VERSION` file at
 the root of this project, bumped by `cicd/release-static-site.ps1`.
 
+## [1.2.5] - 2026-08-20
+
+### Added
+
+- Credentials page: a "Locked-out IPs" panel lists IPs currently blocked by the brute-force
+  protection (`LoginAttemptLimiter`), with an "Unlock" button to clear one early instead of
+  restarting the server - polled every 5s, same pattern as the Edges page's Pending edges panel.
+
 ## [1.2.4] - 2026-08-19
 
 ### Changed

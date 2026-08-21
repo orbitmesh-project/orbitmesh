@@ -79,6 +79,10 @@ export const getPendingEdges = () => get("edges/pending");
 export const approvePendingEdge = (instanceId, name) => post(`edges/pending/${instanceId}/approve`, { Name: name });
 export const dismissPendingEdge = (instanceId) => del(`edges/pending/${instanceId}`);
 
+// Security - IPs currently locked out by the brute-force limiter (see LoginAttemptLimiter)
+export const getLockedOutIps = () => get("security/lockouts");
+export const unlockIp = (ip) => del(`security/lockouts/${ip}`);
+
 // Packages
 export const getPackageInstances = (edgeName) => get(`edges/${edgeName}/packages`);
 export const getPackageInstance = (edgeName, packageName) => get(`edges/${edgeName}/packages/${packageName}`);

@@ -42,6 +42,7 @@ public sealed class ManagementController(
     NuGetFeedClient nuGetFeedClient,
     CredentialUsageTracker credentialUsageTracker,
     AccessKeyCipher accessKeyCipher,
+    LoginAttemptLimiter loginAttemptLimiter,
     ILogger<ManagementController> logger) : ControllerBase
 {
     [HttpGet("CheckAccess")]
@@ -284,6 +285,25 @@ public sealed class ManagementController(
     {
         pendingEdgeRegistry.Remove(instanceId);
         return Ok();
+    }
+
+    // LoginAttemptLimiter's brute-force lockout is in-memory and IP-keyed - useful in dev (a flaky
+    // client hammering the wrong AccessKey trips it fast) with no way to clear one entry short of
+    // restarting the whole server. Read-only visibility gets ConfigurationRead; clearing one gets
+    // ConfigurationWrite, same split as the rest of the server's own operational settings.
+    [HttpGet("security/lockouts")]
+    [RequiresScope(OrbitMeshScope.ConfigurationRead)]
+    public ActionResult<IReadOnlyList<LockedOutIp>> GetLockedOutIps() => Ok(loginAttemptLimiter.GetLockedOutIps());
+
+    [HttpDelete("security/lockouts/{ip}")]
+    [RequiresScope(OrbitMeshScope.ConfigurationWrite)]
+    public IActionResult UnlockIp(string ip)
+    {
+        if (!System.Net.IPAddress.TryParse(ip, out var address))
+        {
+            return BadRequest("Not a valid IP address.");
+        }
+        return loginAttemptLimiter.Unlock(address) ? Ok() : NotFound();
     }
 
     private static EdgeOptions? FindEdge(OrbitMeshOptions cfg, string edgeName) =>

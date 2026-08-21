@@ -4,6 +4,16 @@ Format: [Keep a Changelog](https://keepachangelog.com/). Versions match `<Versio
 `OrbitMesh.Server.csproj`, which is what's reported to the update server (see
 `Services/ServerSelfUpdater.cs` and `Services/UpdateCheckService.cs`).
 
+## [1.2.10] - 2026-08-20
+
+### Added
+
+- `LoginAttemptLimiter`'s in-memory brute-force lockouts are now visible and clearable from the
+  Console instead of only via a full server restart - `GET rest/management/security/lockouts`
+  (`configuration:read`) lists currently locked-out IPs, `DELETE
+  rest/management/security/lockouts/{ip}` (`configuration:write`) clears one early. Shown as a
+  "Locked-out IPs" panel on the Credentials page, polled every 5s like the Pending edges panel.
+
 ## [1.2.9] - 2026-08-20
 
 ### Security

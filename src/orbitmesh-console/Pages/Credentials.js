@@ -54,6 +54,7 @@ export default {
             editNewPassword: "", authExpanded: null, editAuth: null,
             newCredential: emptyCredential(), newCredentialPassword: "",
             creating: false, saving: false, savingAuth: false, scopeCatalog,
+            lockedIps: [], unlocking: {}, lockoutPollHandle: null,
             // A credential's real secret is only ever known right after it's created or reset (see
             // upsert()'s callers below) - nothing re-displays it afterwards, matching how GitHub/most
             // platforms handle PATs. revealDialog holds it just long enough for the admin to copy it.
@@ -62,7 +63,17 @@ export default {
     },
     mounted() {
         // A hard reload straight to this route can mount before managementAvailable turns true.
-        store.onManagementAvailable(() => store.loadCredentials());
+        store.onManagementAvailable(() => {
+            store.loadCredentials();
+            this.loadLockedIps();
+            // Lockouts expire/clear on their own too - poll to reflect that without a manual refresh.
+            this.lockoutPollHandle = setInterval(() => this.loadLockedIps(), 5000);
+        });
+    },
+    beforeUnmount() {
+        if (this.lockoutPollHandle) {
+            clearInterval(this.lockoutPollHandle);
+        }
     },
     computed: {
         filtered() {
@@ -267,6 +278,25 @@ export default {
             } finally {
                 this.savingAuth = false;
             }
+        },
+        async loadLockedIps() {
+            try {
+                this.lockedIps = await api.getLockedOutIps();
+            } catch {
+                // Next poll tick just tries again.
+            }
+        },
+        lockedUntilLabel(lockout) {
+            return new Date(lockout.LockedUntilUtc).toLocaleString();
+        },
+        async unlockIp(lockout) {
+            this.unlocking[lockout.Ip] = true;
+            try {
+                await api.unlockIp(lockout.Ip);
+                await this.loadLockedIps();
+            } finally {
+                this.unlocking[lockout.Ip] = false;
+            }
         }
     },
     template: `
@@ -300,6 +330,25 @@ export default {
                     <li><strong>Human</strong> — a console login; stored as a one-way hash, never shown or resubmitted once set.</li>
                     <li><strong>Scopes</strong> — named permissions (hover a checkbox for details). Grant only what a credential actually needs - e.g. a read-only demo account gets just the *:read scopes.</li>
                 </ul>
+            </div>
+            <div v-if="lockedIps.length > 0" class="deploy-form">
+                <h3>Locked-out IPs</h3>
+                <p style="margin-top:-4px;color:var(--text-muted,#888)">Too many failed AccessKey attempts (brute-force protection) - blocked regardless of what credential they try next, until the lockout expires or is cleared here.</p>
+                <table class="data-table">
+                    <thead>
+                        <tr><th>IP</th><th style="width:140px">Failed attempts</th><th style="width:200px">Locked until</th><th style="width:120px">Actions</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr v-for="lockout in lockedIps" :key="lockout.Ip">
+                            <td>{{ lockout.Ip }}</td>
+                            <td>{{ lockout.FailureCount }}</td>
+                            <td>{{ lockedUntilLabel(lockout) }}</td>
+                            <td class="actions">
+                                <button :disabled="unlocking[lockout.Ip]" @click="unlockIp(lockout)">{{ unlocking[lockout.Ip] ? 'Unlocking...' : 'Unlock' }}</button>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
             </div>
             <p>
                 <input v-model="filter" placeholder="Filter by name" style="width: 260px;" />

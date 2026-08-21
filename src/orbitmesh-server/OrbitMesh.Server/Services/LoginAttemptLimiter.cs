@@ -79,4 +79,29 @@ public sealed class LoginAttemptLimiter
             attempts.TryRemove(ip, out _);
         }
     }
+
+    /// <summary>Currently locked-out IPs, for an admin page to list (and offer to clear without a
+    /// full restart) - a stale/expired entry that just hasn't been touched since isn't included.</summary>
+    public IReadOnlyList<LockedOutIp> GetLockedOutIps()
+    {
+        var now = DateTime.UtcNow;
+        var result = new List<LockedOutIp>();
+        foreach (var (ip, state) in attempts)
+        {
+            lock (state)
+            {
+                if (state.LockedUntilUtc is { } until && now < until)
+                {
+                    result.Add(new LockedOutIp(ip.ToString(), state.Count, until));
+                }
+            }
+        }
+        return result;
+    }
+
+    /// <summary>Clears one IP's lockout (and its failure count) early, without restarting the process.
+    /// Returns false if it wasn't locked out to begin with.</summary>
+    public bool Unlock(IPAddress ip) => attempts.TryRemove(ip, out _);
 }
+
+public sealed record LockedOutIp(string Ip, int FailureCount, DateTime LockedUntilUtc);
