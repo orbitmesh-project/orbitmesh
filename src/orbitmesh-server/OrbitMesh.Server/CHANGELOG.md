@@ -4,6 +4,40 @@ Format: [Keep a Changelog](https://keepachangelog.com/). Versions match `<Versio
 `OrbitMesh.Server.csproj`, which is what's reported to the update server (see
 `Services/ServerSelfUpdater.cs` and `Services/UpdateCheckService.cs`).
 
+## [1.2.12] - 2026-08-21
+
+### Security
+
+- Extended the `messages:execute` fix from 1.2.11 to Edges and Packages, which previously needed no
+  scope at all to connect - `EdgeHub`/`OrbitMeshHub` only ever checked `CheckAccess` (no scope
+  requirement for this access type) plus `Authorizations`. Two new scopes: `edge:connect`
+  (`EdgeHub.IsAuthorized`) and `package:connect` (`OrbitMeshHub.OnConnectedAsync`), both required
+  just to open the connection; `OrbitMeshHub.SendMessage` now also requires `messages:execute`,
+  matching the Consumer-side fix. Scopes stay the coarse "can this credential act as an Edge/Package
+  at all" gate, Authorizations remains the fine one underneath.
+  **No action needed for existing Edges/Packages**: `EnsurePackageCredential` now grants
+  `package:connect`/`messages:execute` on every deploy or Groups change, `ApprovePendingEdge` grants
+  `edge:connect` to newly-approved Edges, and - unlike 1.2.11's Console-credential change - a
+  one-time startup migration in `Program.cs` additively grants the right scope to every
+  already-configured Edge/Package credential still missing it, so upgrading doesn't lock any of
+  them out.
+
+## [1.2.11] - 2026-08-21
+
+### Security
+
+- `ConsumerHub.SendMessage`/`ConsumerController.SendMessage` (REST) were gated only by
+  `Authorizations.Messages`, whose `DefaultAuthorization` is `Allow` unless a credential has
+  explicit rules - so any enabled Human/Console credential, including one meant to be read-only,
+  could invoke any package's message handlers. Added a new `messages:execute` scope
+  (`OrbitMeshScope.cs`), now required by both entry points before `Authorizations` is even
+  consulted - restoring the two-level "Scope authorizes the action class, Authorizations restricts
+  the target" model `OrbitMeshScope.cs`'s own doc comment already describes but this surface didn't
+  actually implement.
+  **Action required**: any existing credential that sends messages (the Console's Messages page,
+  or a Machine credential like a kiosk/dashboard calling `/rest/consumer/SendMessage`) needs
+  `messages:execute` added explicitly, or it will stop working after this update.
+
 ## [1.2.10] - 2026-08-20
 
 ### Added

@@ -182,6 +182,7 @@ public static class PackageHost
 
     private static async Task ConnectAsync(string orbitmeshUri, string edgeName, string packageName, string? accessKey, CancellationToken cancellationToken)
     {
+        IDictionary<string, string>? connectionHeaders = null;
         _connection = new HubConnectionBuilder()
             .WithUrl($"{orbitmeshUri.TrimEnd('/')}/signalr/hubs/{OrbitMeshHubNames.OrbitMesh}", options =>
             {
@@ -190,10 +191,16 @@ public static class PackageHost
                 options.Headers.Add(OrbitMeshHeaderNames.PackageVersion, PackageVersion);
                 options.Headers.Add(OrbitMeshHeaderNames.EdgeName, edgeName);
                 options.Headers.Add(OrbitMeshHeaderNames.PackageName, packageName);
+                // Flipped to true right after the first successful connect below - every negotiate
+                // from then on (SignalR's own automatic reconnect, or our manual retry in Closed)
+                // reads this same live dictionary, so OrbitMeshHub knows not to purge telemetry for
+                // what is, from the server's perspective, the same logical session resuming.
+                options.Headers.Add(OrbitMeshHeaderNames.IsReconnection, bool.FalseString);
                 if (!string.IsNullOrEmpty(accessKey))
                 {
                     options.Headers.Add(OrbitMeshHeaderNames.AccessKey, accessKey);
                 }
+                connectionHeaders = options.Headers;
             })
             .WithOrbitMeshDefaults()
             .Build();
@@ -234,6 +241,7 @@ public static class PackageHost
 
         await _connection.StartAsync(cancellationToken);
         IsConnected = true;
+        connectionHeaders![OrbitMeshHeaderNames.IsReconnection] = bool.TrueString;
         OnConnectedOrReconnected();
     }
 

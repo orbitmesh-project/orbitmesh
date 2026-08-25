@@ -11,17 +11,22 @@ const emptyCredential = () => ({ Name: "", AccessKey: "", Kind: "Machine", Enabl
 const scopeCatalog = [
     { category: "Edges", scopes: [
         { value: "edges:read", label: "Read", description: "View edges and their live connection state." },
-        { value: "edges:write", label: "Write", description: "Add, remove or restart edges." }
+        { value: "edges:write", label: "Write", description: "Add, remove or restart edges." },
+        { value: "edge:connect", label: "Connect", description: "For an Edge's own credential: required just to open its connection to the server. Not an admin scope - grant this on the Machine credential an Edge process itself authenticates with, not on your own account." }
     ] },
     { category: "Packages", scopes: [
         { value: "packages:read", label: "Read", description: "View package instances, live status, logs and settings." },
         { value: "packages:control", label: "Control", description: "Start, stop, restart or reload a running package." },
         { value: "packages:manage", label: "Manage", description: "Add, remove or reconfigure a package instance (settings, groups, recovery)." },
-        { value: "packages:deploy", label: "Deploy", description: "Upload, install or remove packages in the Package Repository." }
+        { value: "packages:deploy", label: "Deploy", description: "Upload, install or remove packages in the Package Repository." },
+        { value: "package:connect", label: "Connect", description: "For a Package's own credential: required just to open its connection to the server. Auto-granted to a package's own credential on deploy - not an admin scope." }
     ] },
     { category: "Telemetry", scopes: [
         { value: "telemetry:read", label: "Read", description: "View telemetry item values." },
         { value: "telemetry:purge", label: "Purge", description: "Delete stored telemetry item history." }
+    ] },
+    { category: "Messages", scopes: [
+        { value: "messages:execute", label: "Execute", description: "Send messages to package handlers (the Messages page, or the Consumer API's SendMessage) - without this, Authorizations' default-Allow would otherwise let any enabled credential invoke them." }
     ] },
     { category: "Credentials", scopes: [
         { value: "credentials:read", label: "Read", description: "View the list of credentials (never their keys)." },

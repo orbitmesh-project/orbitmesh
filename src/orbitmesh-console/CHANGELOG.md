@@ -3,6 +3,24 @@
 Format: [Keep a Changelog](https://keepachangelog.com/). Versions match the `VERSION` file at
 the root of this project, bumped by `cicd/release-static-site.ps1`.
 
+## [1.2.7] - 2026-08-21
+
+### Added
+
+- Credentials page: two new scopes in the matrix - `edge:connect` (Edges category) and
+  `package:connect` (Packages category), marked as being for an Edge's/Package's own credential
+  rather than an admin account, see OrbitMesh.Server 1.2.12's CHANGELOG. No action needed for
+  existing Edge/Package credentials - the Server grants these automatically.
+
+## [1.2.6] - 2026-08-21
+
+### Added
+
+- Credentials page: new "Messages" scope category (`messages:execute`) in the scope matrix - now
+  required server-side before a credential can send a message (Messages page, or a Consumer API
+  caller), see OrbitMesh.Server 1.2.11's CHANGELOG. Grant it to any credential that needs to keep
+  sending messages after updating.
+
 ## [1.2.5] - 2026-08-20
 
 ### Added

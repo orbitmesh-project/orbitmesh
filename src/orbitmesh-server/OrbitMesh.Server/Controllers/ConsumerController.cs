@@ -20,9 +20,11 @@ public sealed class ConsumerController(
     public IActionResult CheckAccess() => Ok();
 
     [HttpPost("SendMessage")]
+    [RequiresScope(OrbitMeshScope.MessagesExecute)]
     public Task<IActionResult> SendMessage([FromBody] SendMessageRequest request) => SendMessageCore(request.Scope, request.Key, request.Data);
 
     [HttpGet("SendMessage")]
+    [RequiresScope(OrbitMeshScope.MessagesExecute)]
     public Task<IActionResult> SendMessage(MessageScope.ScopeType scope, string key, string? data = null, string? args = null, string? sagaId = null)
     {
         var messageScope = MessageScope.Create(scope, string.IsNullOrEmpty(args) ? null : args.Split(','));

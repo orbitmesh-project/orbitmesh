@@ -77,9 +77,16 @@ public sealed class ConsumerHub(
 
     public void UnSubscribeMessages(string group) => groupManager.Remove(Context.ConnectionId, $"Message/{group}");
 
+    // Authorizations.Messages alone isn't enough here: its DefaultAuthorization is Allow unless a
+    // credential has explicit rules, so any enabled Human/Console credential - including one meant to
+    // be read-only - would otherwise be able to invoke every package's message handlers. Scopes are the
+    // coarse gate ("can this credential send messages at all"), Authorizations stays the fine one
+    // ("to which group/package/key").
+    private bool HasScope(string scope) => directory.FindCredential(Context.GetAccessKey())?.Scopes.Contains(scope) == true;
+
     public async Task SendMessage(MessageScope scope, string key, object? data)
     {
-        if (!directory.CheckMessageAuthorization(Context.GetAccessKey(), scope, key))
+        if (!HasScope(OrbitMeshScope.MessagesExecute) || !directory.CheckMessageAuthorization(Context.GetAccessKey(), scope, key))
         {
             return;
         }

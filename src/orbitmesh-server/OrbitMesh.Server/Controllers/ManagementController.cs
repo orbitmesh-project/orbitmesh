@@ -260,7 +260,8 @@ public sealed class ManagementController(
                 Name = request.Name,
                 AccessKey = accessKeyCipher.Encrypt(accessKey),
                 Kind = CredentialKind.Machine,
-                Enable = true
+                Enable = true,
+                Scopes = [OrbitMeshScope.EdgeConnect]
             });
             cfg.Edges.Add(new EdgeOptions { Name = request.Name, Credential = request.Name, InstanceId = instanceId });
         });
@@ -299,7 +300,7 @@ public sealed class ManagementController(
     [RequiresScope(OrbitMeshScope.ConfigurationWrite)]
     public IActionResult UnlockIp(string ip)
     {
-        if (!System.Net.IPAddress.TryParse(ip, out var address))
+        if (!IPAddress.TryParse(ip, out var address))
         {
             return BadRequest("Not a valid IP address.");
         }
@@ -417,6 +418,20 @@ public sealed class ManagementController(
                 .. groups.Select(g => new MessageAuthorizationRule { Scope = MessageScope.ScopeType.Group, Args = g, Authorization = AuthorizationType.Allow })
             ]
         };
+
+        // Additive, unlike Authorizations above - never removes a scope an admin granted by hand, but
+        // makes sure every package credential (including ones provisioned before PackageConnect/
+        // MessagesExecute existed) has what OrbitMeshHub now requires just to connect and send messages.
+        EnsureScope(credential, OrbitMeshScope.PackageConnect);
+        EnsureScope(credential, OrbitMeshScope.MessagesExecute);
+    }
+
+    private static void EnsureScope(CredentialOptions credential, string scope)
+    {
+        if (!credential.Scopes.Contains(scope))
+        {
+            credential.Scopes.Add(scope);
+        }
     }
 
     [HttpDelete("edges/{edge}/packages/{package}")]
@@ -1000,7 +1015,10 @@ public sealed class ManagementController(
         }
         if (address.AddressFamily != AddressFamily.InterNetwork)
         {
-            return true;
+            // IsIPv6SiteLocal only covers the deprecated fec0::/10 range - fc00::/7 (Unique Local
+            // Addresses, the IPv6 equivalent of RFC1918 private IPv4) has no equivalent IPAddress
+            // property and needs its own check, or an internal IPv6-only network is reachable here.
+            return address.AddressFamily != AddressFamily.InterNetworkV6 || (address.GetAddressBytes()[0] & 0xfe) != 0xfc;
         }
         var b = address.GetAddressBytes();
         return b[0] switch

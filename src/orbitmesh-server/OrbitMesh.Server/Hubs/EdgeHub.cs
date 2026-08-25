@@ -16,8 +16,11 @@ public sealed class EdgeHub(
     CredentialUsageTracker usageTracker,
     ILogger<EdgeHub> logger) : Hub
 {
+    // CheckAccess alone doesn't require any scope for this access type (see IOrbitMeshDirectory.CanAccess) -
+    // EdgeConnect is the coarse gate specific to this Hub, Authorizations stays the fine one underneath.
     private bool IsAuthorized() =>
-        directory.CheckAccess(Context.GetEdgeName(), Context.GetPackageName(), Context.GetAccessKey(), OrbitMeshAccessType.OrbitMesh);
+        directory.CheckAccess(Context.GetEdgeName(), Context.GetPackageName(), Context.GetAccessKey(), OrbitMeshAccessType.OrbitMesh)
+        && directory.FindCredential(Context.GetAccessKey())?.Scopes.Contains(OrbitMeshScope.EdgeConnect) == true;
 
     public override async Task OnConnectedAsync()
     {

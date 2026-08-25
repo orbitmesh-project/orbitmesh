@@ -22,6 +22,9 @@ public static class OrbitMeshScope
     public const string ConfigurationRead = "configuration:read";
     public const string ConfigurationWrite = "configuration:write";
     public const string UpdatesManage = "updates:manage";
+    public const string MessagesExecute = "messages:execute";
+    public const string EdgeConnect = "edge:connect";
+    public const string PackageConnect = "package:connect";
     public const string Developer = "developer";
 
     public static readonly IReadOnlyList<string> All =
@@ -32,6 +35,8 @@ public static class OrbitMeshScope
         CredentialsRead, CredentialsManage,
         ConfigurationRead, ConfigurationWrite,
         UpdatesManage,
+        MessagesExecute,
+        EdgeConnect, PackageConnect,
         Developer
     ];
 }

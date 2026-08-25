@@ -4,6 +4,18 @@ Format: [Keep a Changelog](https://keepachangelog.com/). Versions match `<Versio
 `OrbitMesh.Common.csproj`, which is what gets published to
 [nuget.org](https://www.nuget.org/packages/OrbitMesh.Common).
 
+## [1.2.2] - 2026-08-21
+
+### Fixed
+
+- `PackageHost` never sent the `IsReconnection` header, so `OrbitMeshHub.OnConnectedAsync` treated
+  every reconnect - including an ordinary transient network blip, not just a Server restart - as a
+  brand new connection and purged the package's telemetry items. Subscribers would see values
+  vanish for up to a full polling interval after any hiccup, with nothing actually wrong. Now set
+  to `false` for the very first connect and flipped to `true` right after it succeeds, so every
+  later negotiate (SignalR's own automatic reconnect, or the manual retry in `Closed`) correctly
+  reports itself as a reconnection.
+
 ## [1.2.1] - 2026-08-19
 
 

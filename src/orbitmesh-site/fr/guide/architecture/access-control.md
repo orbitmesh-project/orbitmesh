@@ -4,9 +4,9 @@ Chaque connexion - Edge, package, Console, appel REST - s'authentifie avec un `A
 
 ## Scopes
 
-Un identifiant porte une liste de **scopes** nommés (façon PAT, comme un token GitHub) : `edges:read`, `packages:manage`, `credentials:manage`, `updates:manage`, etc. Voir `OrbitMeshScope` pour la liste complète. Chaque scope couvre une tranche de la Management API/du `ControlHub`.
+Un identifiant porte une liste de **scopes** nommés (façon PAT, comme un token GitHub) : `edges:read`, `packages:manage`, `credentials:manage`, `updates:manage`, etc. Voir `OrbitMeshScope` pour la liste complète. Chaque scope couvre une tranche de la Management API/du `ControlHub` - ou, pour trois scopes ci-dessous, le protocole de base Edge/package/consumer lui-même.
 
-Un identifiant sans aucun scope se connecte quand même normalement *en tant qu*'Edge ou package - les scopes ne couvrent que les surfaces d'administration, pas le protocole de base.
+L'identifiant propre à un Edge a besoin de `edge:connect` juste pour ouvrir sa connexion à `EdgeHub` ; l'identifiant propre à un package a besoin de `package:connect` pour ouvrir sa connexion à `OrbitMeshHub`, et de `messages:execute` pour envoyer un message via `SendMessage` (un identifiant Console/Consumer a besoin du même scope pour invoquer un message handler via `ConsumerHub`/l'endpoint REST `SendMessage`). Sans le scope correspondant, `Authorizations` ci-dessous n'est même pas consulté - un identifiant sans `edge:connect`/`package:connect` ne peut pas se connecter du tout, peu importe ce que dit `Authorizations`. L'identifiant d'un package reçoit les deux scopes automatiquement (`EnsurePackageCredential`, réappliqué à chaque déploiement ou changement de groupes) ; un Edge approuvé depuis la liste d'attente reçoit `edge:connect` de la même façon. Tous les autres scopes restent purement liés à l'administration.
 
 ## Règles d'autorisation
 
@@ -19,7 +19,7 @@ Chaque package reçoit son propre identifiant Machine auto-provisionné, au lieu
   "name": "salon.DayInfo",
   "accessKey": "ENC$...",
   "kind": "Machine",
-  "scopes": [],
+  "scopes": ["package:connect", "messages:execute"],
   "authorizations": {
     "messages": {
       "defaultAuthorization": "Deny",

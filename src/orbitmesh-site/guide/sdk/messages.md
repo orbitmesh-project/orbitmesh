@@ -23,4 +23,4 @@ Pass `Shared = true` on `[MessageHandler]` (and `shared: true` on `SendMessage`/
 
 `MessageScope` targets a single package, a group, the whole Edge, or everyone (`Package` / `Group` / `Edge` / `Others` / `All`). Pick the narrowest one that reaches who needs it.
 
-Reaching another package - by name, group, or a broadcast scope - needs an `Allow` rule on the caller's own credential. See [Access control](/guide/architecture/access-control).
+Reaching another package - by name, group, or a broadcast scope - needs an `Allow` rule on the caller's own credential, which in turn needs the `messages:execute` permission scope (not to be confused with `MessageScope` above - unfortunate naming overlap). A package's own credential gets `messages:execute` automatically; a Console/Consumer credential calling `SendMessage` from outside a package needs it granted explicitly. See [Access control](/guide/architecture/access-control).

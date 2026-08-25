@@ -18,10 +18,15 @@ public sealed class OrbitMeshHub(
     CredentialUsageTracker usageTracker,
     ILogger<OrbitMeshHub> logger) : Hub
 {
+    // CheckAccess alone doesn't require any scope for this access type (see IOrbitMeshDirectory.CanAccess) -
+    // PackageConnect is the coarse gate specific to this Hub, Authorizations stays the fine one underneath.
+    private bool HasScope(string scope) => directory.FindCredential(Context.GetAccessKey())?.Scopes.Contains(scope) == true;
+
     public override async Task OnConnectedAsync()
     {
         Context.CaptureConnectionMetadata();
-        if (!directory.CheckAccess(Context.GetEdgeName(), Context.GetPackageName(), Context.GetAccessKey(), OrbitMeshAccessType.OrbitMesh))
+        if (!directory.CheckAccess(Context.GetEdgeName(), Context.GetPackageName(), Context.GetAccessKey(), OrbitMeshAccessType.OrbitMesh)
+            || !HasScope(OrbitMeshScope.PackageConnect))
         {
             metrics.AccessDenied();
             logger.LogWarning(
@@ -90,7 +95,7 @@ public sealed class OrbitMeshHub(
 
     public async Task SendMessage(MessageScope scope, string key, object? data)
     {
-        if (!directory.CheckMessageAuthorization(Context.GetAccessKey(), scope, key))
+        if (!HasScope(OrbitMeshScope.MessagesExecute) || !directory.CheckMessageAuthorization(Context.GetAccessKey(), scope, key))
         {
             return;
         }

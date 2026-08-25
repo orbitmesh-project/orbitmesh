@@ -247,6 +247,41 @@ if (plaintextMachineKeys.Count > 0)
     app.Logger.LogInformation("Encrypted {Count} Machine credential(s) that still had a plaintext AccessKey.", plaintextMachineKeys.Count);
 }
 
+// One-time-ish migration (idempotent, re-checked every start): EdgeHub/OrbitMeshHub now require the
+// EdgeConnect/PackageConnect scope just to connect (see EdgeHub.IsAuthorized/OrbitMeshHub.OnConnectedAsync),
+// and OrbitMeshHub.SendMessage requires MessagesExecute - scopes that didn't exist when older credentials
+// were provisioned. Without this, every already-configured Edge/Package would be locked out the moment
+// this version starts, instead of only newly-provisioned ones getting the scope automatically.
+static HashSet<string> CredentialNamesOf(IEnumerable<string?> names) =>
+    names.Where(n => !string.IsNullOrEmpty(n)).Select(n => n!).ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+var edgeCredentialNames = CredentialNamesOf(orbitmeshOptions.Edges.Select(e => e.Credential));
+var packageCredentialNames = CredentialNamesOf(orbitmeshOptions.Edges.SelectMany(e => e.Packages).Select(p => p.Credential));
+var needsScopeMigration = orbitmeshOptions.Credentials.Any(c =>
+    (edgeCredentialNames.Contains(c.Name) && !c.Scopes.Contains(OrbitMeshScope.EdgeConnect))
+    || (packageCredentialNames.Contains(c.Name) && (!c.Scopes.Contains(OrbitMeshScope.PackageConnect) || !c.Scopes.Contains(OrbitMeshScope.MessagesExecute))));
+if (needsScopeMigration)
+{
+    configWriterForMigration.Update(cfg =>
+    {
+        var edgeNames = CredentialNamesOf(cfg.Edges.Select(e => e.Credential));
+        var packageNames = CredentialNamesOf(cfg.Edges.SelectMany(e => e.Packages).Select(p => p.Credential));
+        foreach (var credential in cfg.Credentials)
+        {
+            if (edgeNames.Contains(credential.Name) && !credential.Scopes.Contains(OrbitMeshScope.EdgeConnect))
+            {
+                credential.Scopes.Add(OrbitMeshScope.EdgeConnect);
+            }
+            if (packageNames.Contains(credential.Name))
+            {
+                if (!credential.Scopes.Contains(OrbitMeshScope.PackageConnect)) { credential.Scopes.Add(OrbitMeshScope.PackageConnect); }
+                if (!credential.Scopes.Contains(OrbitMeshScope.MessagesExecute)) { credential.Scopes.Add(OrbitMeshScope.MessagesExecute); }
+            }
+        }
+    });
+    app.Logger.LogInformation("Granted EdgeConnect/PackageConnect/MessagesExecute to existing Edge/Package credentials that were missing them.");
+}
+
 // Seed the package registry from config so the console sees declared-but-not-yet-connected packages,
 // and keep it in sync whenever appsettings.json changes (manual edits or ManagementController writes).
 var packageRegistrySync = app.Services.GetRequiredService<PackageRegistrySync>();

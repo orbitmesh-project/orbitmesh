@@ -4,9 +4,9 @@ Every connection - Edge, package, Console, REST call - authenticates with an `Ac
 
 ## Scopes
 
-A credential holds a list of named **scopes** (PAT-style, like a GitHub token): `edges:read`, `packages:manage`, `credentials:manage`, `updates:manage`, and so on. See `OrbitMeshScope` for the full list. Each scope gates one slice of the Management API/`ControlHub`.
+A credential holds a list of named **scopes** (PAT-style, like a GitHub token): `edges:read`, `packages:manage`, `credentials:manage`, `updates:manage`, and so on. See `OrbitMeshScope` for the full list. Each scope gates one slice of the Management API/`ControlHub` - or, for three scopes below, the base Edge/package/consumer protocol itself.
 
-A credential with zero scopes still connects fine *as* an Edge or package - scopes only gate the admin-facing surfaces, not the base protocol.
+An Edge's own credential needs `edge:connect` just to open its connection to `EdgeHub`; a package's own credential needs `package:connect` to open its connection to `OrbitMeshHub`, and `messages:execute` to send a message from `SendMessage` (a Console/Consumer credential needs the same scope to invoke a message handler via `ConsumerHub`/the REST `SendMessage` endpoint). Without the matching scope, `Authorizations` below is never even consulted - a credential missing `edge:connect`/`package:connect` can't connect at all, regardless of what its `Authorizations` say. A package's own credential gets both scopes automatically (`EnsurePackageCredential`, re-applied on every deploy or Groups change); an Edge approved from the pending list gets `edge:connect` the same way. Every other scope is purely admin-facing.
 
 ## Authorization rules
 
@@ -19,7 +19,7 @@ Each package gets its own auto-provisioned Machine credential instead of sharing
   "name": "salon.DayInfo",
   "accessKey": "ENC$...",
   "kind": "Machine",
-  "scopes": [],
+  "scopes": ["package:connect", "messages:execute"],
   "authorizations": {
     "messages": {
       "defaultAuthorization": "Deny",
