@@ -39,6 +39,7 @@ builder.Services.AddSingleton<OrbitMeshTelemetryItemManager>();
 builder.Services.AddSingleton<OrbitMeshMetrics>();
 builder.Services.AddSingleton<OrbitMeshLogService>();
 builder.Services.AddSingleton<LoginAttemptLimiter>();
+builder.Services.AddSingleton<SagaRegistry>();
 builder.Services.AddSingleton<CredentialUsageTracker>();
 builder.Services.AddSingleton<AccessKeyCipher>();
 builder.Services.AddHostedService<CredentialUsageFlushService>();

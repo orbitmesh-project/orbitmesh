@@ -13,6 +13,7 @@ public sealed class ConsumerHub(
     IHubContext<OrbitMeshHub> orbitmeshHub,
     IHubContext<ConsumerHub> selfHub,
     CredentialUsageTracker usageTracker,
+    SagaRegistry sagaRegistry,
     ILogger<ConsumerHub> logger) : Hub
 {
     public override Task OnConnectedAsync()
@@ -91,6 +92,10 @@ public sealed class ConsumerHub(
             return;
         }
         var sender = new MessageSender { Type = MessageSender.SenderType.ConsumerHub, ConnectionId = Context.ConnectionId, FriendlyName = Context.GetPackageInstanceId() };
+        if (scope.IsSaga && key != OrbitMeshDefaultNames.SagaResponseMessageKey)
+        {
+            sagaRegistry.RegisterRequest(scope.SagaId!, sender);
+        }
         // Regardless of origin, message fan-out is always driven through OrbitMeshHub's package-side
         // group space first, then relayed to consumers - matching the original single funnel method.
         await OrbitMeshHub.SendMessageOnOrbitMesh(orbitmeshHub.Clients, packageGroupManager, selfHub, groupManager, metrics, sender, scope, key, data);

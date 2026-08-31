@@ -43,7 +43,7 @@ public interface IOrbitMeshDirectory
     List<PackageDescription> GetPackagesList(string edgeName, bool includeAccessKey = false);
 }
 
-public sealed class OrbitMeshDirectory(IOptionsMonitor<OrbitMeshOptions> options, AccessKeyCipher cipher) : IOrbitMeshDirectory
+public sealed class OrbitMeshDirectory(IOptionsMonitor<OrbitMeshOptions> options, AccessKeyCipher cipher, SagaRegistry sagaRegistry) : IOrbitMeshDirectory
 {
     public OrbitMeshOptions Current => options.CurrentValue;
 
@@ -156,9 +156,14 @@ public sealed class OrbitMeshDirectory(IOptionsMonitor<OrbitMeshOptions> options
         {
             return false;
         }
+        // The bypass below only fires for a "__Response" message, and only if SagaRegistry recognizes
+        // scope.SagaId as a request THIS server actually saw go out, addressed back to that request's
+        // real sender - scope.IsSaga/SagaId/Args are otherwise entirely client-controlled, so trusting
+        // them unconditionally let any credential holding messages:execute reach any target (CodeQL
+        // cs/user-controlled-bypass).
         if (scope.IsSaga && messageKey == OrbitMeshDefaultNames.SagaResponseMessageKey)
         {
-            return true;
+            return sagaRegistry.TryConsumeResponse(scope.SagaId!, scope);
         }
         return CheckAuthorization(accessKey, credential =>
         {

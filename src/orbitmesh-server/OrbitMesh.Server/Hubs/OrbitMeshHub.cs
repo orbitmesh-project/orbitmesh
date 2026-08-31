@@ -16,6 +16,7 @@ public sealed class OrbitMeshHub(
     IHubContext<ConsumerHub> consumerHub,
     IHubContext<ControlHub> controlHub,
     CredentialUsageTracker usageTracker,
+    SagaRegistry sagaRegistry,
     ILogger<OrbitMeshHub> logger) : Hub
 {
     // CheckAccess alone doesn't require any scope for this access type (see IOrbitMeshDirectory.CanAccess) -
@@ -100,6 +101,10 @@ public sealed class OrbitMeshHub(
             return;
         }
         var sender = new MessageSender { Type = MessageSender.SenderType.OrbitMeshHub, ConnectionId = Context.ConnectionId, FriendlyName = Context.GetPackageInstanceId() };
+        if (scope.IsSaga && key != OrbitMeshDefaultNames.SagaResponseMessageKey)
+        {
+            sagaRegistry.RegisterRequest(scope.SagaId!, sender);
+        }
         await SendMessageOnOrbitMesh(Clients, groupManager, consumerHub, consumerGroupManager, metrics, sender, scope, key, data);
     }
 

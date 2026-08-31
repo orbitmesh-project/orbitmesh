@@ -14,7 +14,8 @@ public sealed class ConsumerController(
     ConsumerGroupManager consumerGroupManager,
     IHubContext<OrbitMeshHub> orbitmeshHub,
     IHubContext<ConsumerHub> consumerHub,
-    OrbitMeshMetrics metrics) : ControllerBase
+    OrbitMeshMetrics metrics,
+    SagaRegistry sagaRegistry) : ControllerBase
 {
     [HttpGet("CheckAccess")]
     public IActionResult CheckAccess() => Ok();
@@ -42,6 +43,10 @@ public sealed class ConsumerController(
             return Forbid();
         }
         var sender = new MessageSender { Type = MessageSender.SenderType.ConsumerHttp, ConnectionId = null, FriendlyName = "Consumer" };
+        if (scope.IsSaga && key != OrbitMeshDefaultNames.SagaResponseMessageKey)
+        {
+            sagaRegistry.RegisterRequest(scope.SagaId!, sender);
+        }
         await OrbitMeshHub.SendMessageOnOrbitMesh(orbitmeshHub.Clients, packageGroupManager, consumerHub, consumerGroupManager, metrics, sender, scope, key, data);
         return Ok();
     }

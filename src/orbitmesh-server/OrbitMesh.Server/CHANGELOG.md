@@ -4,6 +4,22 @@ Format: [Keep a Changelog](https://keepachangelog.com/). Versions match `<Versio
 `OrbitMesh.Server.csproj`, which is what's reported to the update server (see
 `Services/ServerSelfUpdater.cs` and `Services/UpdateCheckService.cs`).
 
+## [1.2.14]
+
+### Security
+
+- `CheckMessageAuthorization`'s saga-response bypass trusted `scope.IsSaga`/`SagaId` unconditionally -
+  both are entirely client-controlled (`SagaId` is even accepted as a raw query parameter on the
+  Consumer REST `SendMessage` endpoint), so any credential holding just `messages:execute` could
+  reach any target by claiming to be answering a saga that never happened, skipping
+  `Authorizations.Messages` entirely (CodeQL `cs/user-controlled-bypass`). New `SagaRegistry`
+  service tracks sagas this server actually saw go out (registered by `ConsumerController`,
+  `ConsumerHub`, `OrbitMeshHub` right after a real request is authorized); the bypass now only
+  fires for a `SagaId` still pending in that registry, and only when the response is addressed
+  back to that saga's real originator - each entry expires after 5 minutes and is consumed
+  (single-use) on a successful match. **No action needed** - existing saga request/response usage
+  (`PackageHost`'s `WithSaga`/`OnSagaResponse`/`SendResponse`) is unaffected.
+
 ## [1.2.13]
 
 ### Security
