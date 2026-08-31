@@ -28,7 +28,7 @@ public sealed class PackageFileMiddleware(RequestDelegate next, ILogger<PackageF
 
         if (fullPath != root && !fullPath.StartsWith(rootWithSeparator, StringComparison.Ordinal))
         {
-            logger.LogWarning("Rejected package request outside the packages root: {Path} (resolved to {LocalPath})", context.Request.Path, fullPath);
+            logger.LogWarning("Rejected package request outside the packages root: {Path} (resolved to {LocalPath})", context.Request.Path.ToString().ForLog(), fullPath);
             context.Response.StatusCode = StatusCodes.Status404NotFound;
             await context.Response.WriteAsync("Package not found");
             return;
@@ -36,13 +36,13 @@ public sealed class PackageFileMiddleware(RequestDelegate next, ILogger<PackageF
 
         if (!File.Exists(fullPath))
         {
-            logger.LogWarning("Package not found for {Path} (local path: {LocalPath})", context.Request.Path, fullPath);
+            logger.LogWarning("Package not found for {Path} (local path: {LocalPath})", context.Request.Path.ToString().ForLog(), fullPath);
             context.Response.StatusCode = StatusCodes.Status404NotFound;
             await context.Response.WriteAsync("Package not found");
             return;
         }
 
-        logger.LogInformation("{Edge} downloading {Path}", context.Request.Headers[OrbitMeshHeaderNames.EdgeName], context.Request.Path);
+        logger.LogInformation("{Edge} downloading {Path}", context.Request.Headers[OrbitMeshHeaderNames.EdgeName].ToString().ForLog(), context.Request.Path.ToString().ForLog());
         context.Response.ContentType = "application/zip";
         await context.Response.SendFileAsync(fullPath);
     }

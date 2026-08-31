@@ -96,7 +96,7 @@ public sealed class AccessKeyAuthenticationMiddleware(RequestDelegate next, ILog
             if (accessType == OrbitMeshAccessType.Management && MutatingMethods.Contains(context.Request.Method))
             {
                 auditLogger.LogInformation("{RemoteIp} credential='{Credential}' {Method} {Path}",
-                    remoteIp, credentialName ?? "?", context.Request.Method, path);
+                    remoteIp, (credentialName ?? "?").ForLog(), context.Request.Method.ForLog(), path.ToString().ForLog());
             }
             await next(context);
             return;
@@ -110,7 +110,7 @@ public sealed class AccessKeyAuthenticationMiddleware(RequestDelegate next, ILog
         logger.LogWarning(
             "Access denied for {RemoteIp} on {Path} (EdgeName={EdgeName}, PackageName={PackageName}, AccessType={AccessType}). " +
             "Check that a matching Edge/Credential is configured in appsettings.json.",
-            remoteIp, context.Request.Path, edgeName, packageName, accessType);
+            remoteIp, context.Request.Path.ToString().ForLog(), edgeName.ForLog(), packageName.ForLog(), accessType);
         context.Response.StatusCode = StatusCodes.Status403Forbidden;
         await context.Response.WriteAsync("Forbidden");
     }

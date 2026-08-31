@@ -275,7 +275,7 @@ public sealed class ManagementController(
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "Unable to push the new credential to Edge '{Name}' (connectionId='{ConnectionId}') - it will need the AccessKey applied by hand.", request.Name, pending.ConnectionId);
+            logger.LogWarning(ex, "Unable to push the new credential to Edge '{Name}' (connectionId='{ConnectionId}') - it will need the AccessKey applied by hand.", request.Name.ForLog(), pending.ConnectionId);
         }
         return Ok(new { name = request.Name, accessKey, pushed });
     }

@@ -4,6 +4,18 @@ Format: [Keep a Changelog](https://keepachangelog.com/). Versions match `<Versio
 `OrbitMesh.Server.csproj`, which is what's reported to the update server (see
 `Services/ServerSelfUpdater.cs` and `Services/UpdateCheckService.cs`).
 
+## [1.2.13]
+
+### Security
+
+- Sanitized user-controlled values (request path, `EdgeName`/`PackageName` read from a header or
+  query string, credential name, HTTP method) before writing them into log messages -
+  `PackageFileMiddleware`, `AccessKeyAuthenticationMiddleware`, `ManagementController`. Without
+  this, a crafted header/query value containing CR/LF could forge fake-looking extra log entries
+  (CodeQL `cs/log-forging`). New `LogSanitizerExtensions.ForLog()` escapes `\r`/`\n`/line-separator
+  characters rather than stripping them, so the original value is still fully recoverable from the
+  log.
+
 ## [1.2.12] - 2026-08-21
 
 ### Security

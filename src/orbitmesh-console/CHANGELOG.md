@@ -3,6 +3,19 @@
 Format: [Keep a Changelog](https://keepachangelog.com/). Versions match the `VERSION` file at
 the root of this project, bumped by `cicd/release-static-site.ps1`.
 
+## [1.2.9]
+
+### Security
+
+- CodeMirror (vendored, `Libs/codemirror/modes/`): fixed two regexes whose alternatives could
+  re-partition the same input multiple ways, causing exponential backtracking (ReDoS) on
+  pathological input - the async-arrow whitespace/comment skip and the TypeScript generic-call
+  lookahead in `javascript.js`. Verified matching behavior is unchanged on normal input.
+- CodeMirror (vendored): the XML/HTML comment tokenizer in `xml.js` only recognized `-->` as the
+  end of a comment, not the `--!>` "bogus comment" form real browsers also terminate on - a
+  highlighter/filter relying on the old regex could still think it was inside a comment for
+  content the browser already treats as live markup.
+
 ## [1.2.8]
 
 ### Fixed
