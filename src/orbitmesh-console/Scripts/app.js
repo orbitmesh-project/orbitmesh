@@ -1,6 +1,7 @@
 import { router } from "./router.js";
 import { store } from "./store.js";
 import * as managementApi from "./management-api.js";
+import { isLoggedIn as cookieIsLoggedIn } from "./auth.js";
 import Toast from "./Toast.js";
 import ConfirmDialog from "./ConfirmDialog.js";
 
@@ -115,3 +116,32 @@ app.mount("#app");
 if (store.isLoggedIn) {
     store.connect();
 }
+
+// store.isLoggedIn otherwise only ever changes on an explicit signIn()/logout() call - it does not
+// react on its own to the AccessKey cookie actually expiring, or to the server rejecting it (access
+// revoked, password changed elsewhere). Without this, a user sitting on a page with no navigation
+// event to trigger the router guard would be left staring at a "logged in" shell that can't load or
+// save anything, instead of being bounced to /login.
+function forceLogout(message) {
+    if (!store.isLoggedIn) {
+        return;
+    }
+    store.logout();
+    router.push("/login");
+    store.notify(message, "error");
+}
+
+managementApi.setUnauthorizedHandler(() => forceLogout("Your session has expired. Please log in again."));
+
+function checkCookieStillValid() {
+    if (store.isLoggedIn && !cookieIsLoggedIn()) {
+        forceLogout("Your session has expired. Please log in again.");
+    }
+}
+
+setInterval(checkCookieStillValid, 15000);
+document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) {
+        checkCookieStillValid();
+    }
+});

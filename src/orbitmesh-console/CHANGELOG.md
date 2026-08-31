@@ -3,6 +3,17 @@
 Format: [Keep a Changelog](https://keepachangelog.com/). Versions match the `VERSION` file at
 the root of this project, bumped by `cicd/release-static-site.ps1`.
 
+## [1.2.8]
+
+### Fixed
+
+- Expired/invalidated session no longer leaves the console stuck on a "logged in" shell with no
+  working data. `store.isLoggedIn` used to only change on an explicit login/logout - it never
+  reacted to the AccessKey cookie actually expiring or the server rejecting it (401/403), and the
+  router's login guard only re-checks on navigation, so a user sitting on a page with no route
+  change never got bounced to `/login`. Now: any 401/403 from the Management API forces a logout +
+  redirect, and a periodic check (every 15s, plus on tab focus) catches the cookie expiring outright.
+
 ## [1.2.7] - 2026-08-21
 
 ### Added

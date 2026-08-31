@@ -9,6 +9,14 @@ export function initializeClient(serverUri, accessKey, friendlyName) {
     defaultHeaders = { EdgeName: "Management", PackageName: friendlyName, AccessKey: accessKey };
 }
 
+// Fired whenever a management API call comes back 401/403 - the AccessKey cookie has expired or been
+// revoked server-side. The console shell (app.js) uses this to force a logout and bounce to /login
+// instead of leaving the user stranded on a page that silently can't load or save anything.
+let unauthorizedHandler = null;
+export function setUnauthorizedHandler(handler) {
+    unauthorizedHandler = handler;
+}
+
 // For when the signed-in admin resets their OWN credential's password (see Credentials.js) - every
 // REST call here resends this AccessKey, so it has to be refreshed in place or every request after the
 // reset 403s until the page is reloaded.
@@ -41,6 +49,9 @@ async function request(method, httpMethod, parameters, body) {
     });
     if (!response.ok) {
         const text = await response.text().catch(() => "");
+        if ((response.status === 401 || response.status === 403) && unauthorizedHandler) {
+            unauthorizedHandler();
+        }
         throw new ManagementApiError(response.status, text);
     }
     const contentType = response.headers.get("content-type") || "";
@@ -152,6 +163,9 @@ export async function uploadPackage(file) {
     formData.append("file", file);
     const response = await fetch(buildUrl("upload-package"), { method: "POST", headers: defaultHeaders, body: formData });
     if (!response.ok) {
+        if ((response.status === 401 || response.status === 403) && unauthorizedHandler) {
+            unauthorizedHandler();
+        }
         throw new ManagementApiError(response.status, await response.text().catch(() => ""));
     }
 }
