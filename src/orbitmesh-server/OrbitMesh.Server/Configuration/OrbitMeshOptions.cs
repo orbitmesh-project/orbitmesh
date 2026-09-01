@@ -35,6 +35,8 @@ public sealed class OrbitMeshOptions
 
     public List<VariableOptions> Variables { get; set; } = new();
 
+    public List<ScheduledTaskOptions> ScheduledTasks { get; set; } = new();
+
     public UpdateOptions UpdateOptions { get; set; } = new();
 
     // Empty by default - there's no fixed, stable public feed URL to ship as a baked-in default yet.
@@ -214,4 +216,41 @@ public sealed class VariableOptions
     public required string Value { get; set; }
 
     public bool IsSecret { get; set; }
+}
+
+// Fires a single message (see ScheduledTaskRunner) on a cron schedule - the automation equivalent of
+// a human opening the Console's Messages page and clicking Invoke. Runs as Credential, so it's bound
+// by that credential's own Authorizations/Scopes (messages:execute) exactly like any other sender -
+// no bypass of the permission model just because the trigger is a timer instead of a person.
+public sealed class ScheduledTaskOptions
+{
+    public required string Name { get; set; }
+
+    public bool Enable { get; set; } = true;
+
+    // Standard 5-field cron syntax (minute hour day month day-of-week), parsed by Cronos.
+    public required string CronExpression { get; set; }
+
+    public required string Credential { get; set; }
+
+    // If false (the default), an occurrence missed while the Server was down/updating is simply
+    // skipped - the next normal occurrence still fires on schedule. If true, one catch-up send fires
+    // on the next tick after downtime (once, regardless of how many occurrences were actually missed -
+    // this is meant to bring state back in line, not replay every missed day's action).
+    public bool CatchUpIfMissed { get; set; }
+
+    public required string EdgeName { get; set; }
+
+    public required string PackageName { get; set; }
+
+    // The handler's fully-qualified key (e.g. "TPLinkSmartHome/SetPower") - see MessageHandlerAttribute.
+    public required string MessageKey { get; set; }
+
+    // Raw JSON text (same convention as PackageOptions.Settings), e.g. "[\"deviceId123\", false]" -
+    // null for a handler that takes no parameters.
+    public string? Data { get; set; }
+
+    // Updated by ScheduledTaskRunner after every fire (or skipped-but-acknowledged occurrence) - not
+    // meant to be hand-edited, but visible so an admin can see when a task last actually ran.
+    public DateTime? LastRunUtc { get; set; }
 }

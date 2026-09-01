@@ -3,6 +3,19 @@
 Format: [Keep a Changelog](https://keepachangelog.com/). Versions match the `VERSION` file at
 the root of this project, bumped by `cicd/release-static-site.ps1`.
 
+## [1.2.10]
+
+### Added
+
+- New "Scheduled Tasks" page (Administration) - fires a message on a cron schedule as a chosen
+  credential. Edge/Package/Message handler are picked from dropdowns backed by real connected
+  packages and their actually-declared `[MessageHandler]`s (reusing `store.messageHandlers`, the
+  same data the Messages page already shows) instead of free-typed names, and per-parameter inputs
+  are generated from the handler's own declared parameters - both meant to rule out a typo'd
+  key/parameter going unnoticed in an unattended, timer-triggered send. New "Schedules" scope
+  category (`schedules:read`/`schedules:manage`) in the Credentials page's scope matrix. See
+  OrbitMesh.Server 1.2.15's CHANGELOG.
+
 ## [1.2.9]
 
 ### Security

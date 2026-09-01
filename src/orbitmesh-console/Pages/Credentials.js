@@ -39,6 +39,10 @@ const scopeCatalog = [
     { category: "Updates", scopes: [
         { value: "updates:manage", label: "Manage", description: "Check for and apply Server/Console/package updates." }
     ] },
+    { category: "Schedules", scopes: [
+        { value: "schedules:read", label: "Read", description: "View scheduled tasks." },
+        { value: "schedules:manage", label: "Manage", description: "Create, edit or remove scheduled tasks." }
+    ] },
     { category: "Other", scopes: [
         { value: "developer", label: "Developer tools", description: "Direct developer workflows (messages, telemetry) without deploying a package to a real edge." }
     ] }

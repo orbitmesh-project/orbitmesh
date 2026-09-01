@@ -39,6 +39,7 @@ export default defineConfig({
                 { text: "Overview", link: "/guide/architecture/" },
                 { text: "Access control", link: "/guide/architecture/access-control" },
                 { text: "Variables", link: "/guide/architecture/variables" },
+                { text: "Scheduled tasks", link: "/guide/architecture/scheduled-tasks" },
                 { text: "Package repository & distribution", link: "/guide/architecture/packages" },
                 { text: "Hosting other sites", link: "/guide/architecture/external-sites" },
                 { text: "Recovery & updates", link: "/guide/architecture/recovery-updates" }
@@ -93,6 +94,7 @@ export default defineConfig({
                 { text: "Vue d'ensemble", link: "/fr/guide/architecture/" },
                 { text: "Contrôle d'accès", link: "/fr/guide/architecture/access-control" },
                 { text: "Variables", link: "/fr/guide/architecture/variables" },
+                { text: "Tâches planifiées", link: "/fr/guide/architecture/scheduled-tasks" },
                 { text: "Dépôt de packages et distribution", link: "/fr/guide/architecture/packages" },
                 { text: "Héberger d'autres sites", link: "/fr/guide/architecture/external-sites" },
                 { text: "Récupération et mises à jour", link: "/fr/guide/architecture/recovery-updates" }

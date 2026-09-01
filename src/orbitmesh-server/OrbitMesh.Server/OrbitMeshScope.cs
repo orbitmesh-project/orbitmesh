@@ -25,6 +25,8 @@ public static class OrbitMeshScope
     public const string MessagesExecute = "messages:execute";
     public const string EdgeConnect = "edge:connect";
     public const string PackageConnect = "package:connect";
+    public const string SchedulesRead = "schedules:read";
+    public const string SchedulesManage = "schedules:manage";
     public const string Developer = "developer";
 
     public static readonly IReadOnlyList<string> All =
@@ -37,6 +39,7 @@ public static class OrbitMeshScope
         UpdatesManage,
         MessagesExecute,
         EdgeConnect, PackageConnect,
+        SchedulesRead, SchedulesManage,
         Developer
     ];
 }

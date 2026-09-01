@@ -24,3 +24,7 @@ Passez `Shared = true` sur `[MessageHandler]` (et `shared: true` sur `SendMessag
 `MessageScope` cible un seul package, un groupe, tout l'Edge, ou tout le monde (`Package` / `Group` / `Edge` / `Others` / `All`). Choisissez le plus restreint qui atteint qui doit être atteint.
 
 Atteindre un autre package - par nom, groupe, ou une portée de diffusion - nécessite une règle `Allow` sur la propre credential de l'appelant, laquelle a en plus besoin du scope de permission `messages:execute` (à ne pas confondre avec `MessageScope` ci-dessus - chevauchement de vocabulaire malheureux). L'identifiant propre d'un package reçoit `messages:execute` automatiquement ; un identifiant Console/Consumer qui appelle `SendMessage` depuis l'extérieur d'un package doit se le voir accorder explicitement. Voir [Contrôle d'accès](/fr/guide/architecture/access-control).
+
+## Déclencher un message sur un horaire
+
+Les [tâches planifiées](/fr/guide/architecture/scheduled-tasks) envoient un message selon un horaire cron au lieu d'un humain qui clique sur Invoke - même vérification `Authorizations`/`messages:execute` dans les deux cas.

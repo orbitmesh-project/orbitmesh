@@ -55,6 +55,7 @@ builder.Services.AddSingleton<StaticSiteUpdateCheckService>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<StaticSiteUpdateCheckService>());
 builder.Services.AddSingleton<StaticSiteUpdater>();
 builder.Services.AddSingleton<NuGetFeedClient>();
+builder.Services.AddHostedService<ScheduledTaskRunner>();
 // HttpClient sends no User-Agent at all by default, unlike curl/a browser - some update servers
 // (this one included, apparently) sit behind a firewall/CDN that 403s requests missing one.
 var updateClientUserAgent = $"OrbitMesh.Server-Updater/{typeof(Program).Assembly.GetName().Version}";

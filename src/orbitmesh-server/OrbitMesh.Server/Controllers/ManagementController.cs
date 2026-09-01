@@ -2,6 +2,7 @@ using System.IO.Compression;
 using System.Net;
 using System.Net.Sockets;
 using System.Security.Cryptography;
+using Cronos;
 using OrbitMesh;
 using OrbitMesh.Deployment;
 using OrbitMesh.Server.Configuration;
@@ -655,6 +656,50 @@ public sealed class ManagementController(
     public IActionResult RemoveVariable(string name)
     {
         configWriter.Update(cfg => cfg.Variables.RemoveAll(v => v.Name.Equals(name, StringComparison.OrdinalIgnoreCase)));
+        return Ok();
+    }
+
+    [HttpGet("scheduledtasks")]
+    [RequiresScope(OrbitMeshScope.SchedulesRead)]
+    public ActionResult<List<ScheduledTaskOptions>> GetScheduledTasks() => options.CurrentValue.ScheduledTasks;
+
+    [HttpPost("scheduledtasks")]
+    [RequiresScope(OrbitMeshScope.SchedulesManage)]
+    public IActionResult InsertOrUpdateScheduledTask([FromBody] ScheduledTaskOptions task)
+    {
+        if (string.IsNullOrWhiteSpace(task.Name))
+        {
+            return BadRequest("Name is required.");
+        }
+        try
+        {
+            CronExpression.Parse(task.CronExpression);
+        }
+        catch (Exception ex)
+        {
+            return BadRequest($"Invalid cron expression: {ex.Message}");
+        }
+        configWriter.Update(cfg =>
+        {
+            var existing = cfg.ScheduledTasks.FirstOrDefault(t => t.Name.Equals(task.Name, StringComparison.OrdinalIgnoreCase));
+            // A brand new task starts counting occurrences from whenever ScheduledTaskRunner next
+            // notices it (see its own doc comment) rather than replaying history - LastRunUtc only
+            // ever comes from that service, never from the Console.
+            task.LastRunUtc = existing?.LastRunUtc;
+            if (existing != null)
+            {
+                cfg.ScheduledTasks.Remove(existing);
+            }
+            cfg.ScheduledTasks.Add(task);
+        });
+        return Ok();
+    }
+
+    [HttpDelete("scheduledtasks/{name}")]
+    [RequiresScope(OrbitMeshScope.SchedulesManage)]
+    public IActionResult RemoveScheduledTask(string name)
+    {
+        configWriter.Update(cfg => cfg.ScheduledTasks.RemoveAll(t => t.Name.Equals(name, StringComparison.OrdinalIgnoreCase)));
         return Ok();
     }
 

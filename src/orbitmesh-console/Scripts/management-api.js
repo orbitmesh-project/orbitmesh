@@ -115,6 +115,11 @@ export const revealVariable = (name) => get(`variables/${name}/reveal`);
 export const upsertVariable = (name, value, isSecret) => post("variables", { Name: name, Value: value, IsSecret: !!isSecret });
 export const removeVariable = (name) => del("variables/" + name);
 
+// Scheduled tasks - fires a message on a cron schedule, see OrbitMesh.Server's ScheduledTaskRunner.
+export const getScheduledTasks = () => get("scheduledtasks");
+export const upsertScheduledTask = (task) => post("scheduledtasks", task);
+export const removeScheduledTask = (name) => del("scheduledtasks/" + name);
+
 // First-run bootstrap - unauthenticated (see AccessKeyAuthenticationMiddleware's /rest/management/setup
 // bypass), called from Login.js before any credential exists, so both take serverUri directly instead
 // of going through initializeClient()/urlBase (nothing to log in with yet).

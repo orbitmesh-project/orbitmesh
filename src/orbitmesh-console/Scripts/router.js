@@ -10,6 +10,7 @@ import TelemetryItems from "../Pages/TelemetryItems.js";
 import MessageHandlers from "../Pages/MessageHandlers.js";
 import Credentials from "../Pages/Credentials.js";
 import ConfigurationEditor from "../Pages/ConfigurationEditor.js";
+import ScheduledTasks from "../Pages/ScheduledTasks.js";
 
 const { createRouter, createWebHistory } = VueRouter;
 
@@ -24,7 +25,8 @@ const routes = [
     { path: "/telemetry", component: TelemetryItems },
     { path: "/messages", component: MessageHandlers },
     { path: "/credentials", component: Credentials },
-    { path: "/configuration", component: ConfigurationEditor }
+    { path: "/configuration", component: ConfigurationEditor },
+    { path: "/scheduledtasks", component: ScheduledTasks }
 ];
 
 export const router = createRouter({

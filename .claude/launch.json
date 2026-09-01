@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "orbitmesh-server",
+      "runtimeExecutable": "dotnet",
+      "runtimeArgs": ["run", "--project", "src/orbitmesh-server/OrbitMesh.Server"],
+      "port": 8088
+    }
+  ]
+}

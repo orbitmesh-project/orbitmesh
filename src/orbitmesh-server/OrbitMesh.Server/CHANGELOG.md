@@ -4,6 +4,20 @@ Format: [Keep a Changelog](https://keepachangelog.com/). Versions match `<Versio
 `OrbitMesh.Server.csproj`, which is what's reported to the update server (see
 `Services/ServerSelfUpdater.cs` and `Services/UpdateCheckService.cs`).
 
+## [1.2.15]
+
+### Added
+
+- Scheduled tasks: fire a message on a cron schedule (`ScheduledTaskRunner`, new `ScheduledTaskOptions`
+  section) - the automation equivalent of a human using the Console's Messages page. Each task runs
+  as a chosen credential, through the same `CheckMessageAuthorization`/`messages:execute` check as
+  any other sender - not a way around the permission model, just another caller of it. New scopes
+  `schedules:read`/`schedules:manage`, new `GET/POST rest/management/scheduledtasks` and `DELETE
+  rest/management/scheduledtasks/{name}`. An occurrence missed while the Server was down (update,
+  crash, ...) is skipped by default; `CatchUpIfMissed` fires one catch-up send instead (never one
+  per missed occurrence - this brings state back in line, it doesn't replay every missed day).
+  Cron parsing via the new `Cronos` dependency.
+
 ## [1.2.14]
 
 ### Security
