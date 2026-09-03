@@ -3,6 +3,14 @@
 Format: [Keep a Changelog](https://keepachangelog.com/). Versions match the `VERSION` file at
 the root of this project, bumped by `cicd/release-static-site.ps1`.
 
+## [1.2.12]
+
+### Added
+
+- Browser tab favicon - the Console had none, falling back to the browser's generic blank-page icon.
+  New `favicon.ico` (multi-size: 16-256px), a simple orbit-ring-and-nodes mark on a dark rounded
+  square, matching the app's own dark theme.
+
 ## [1.2.11]
 
 ### Fixed
