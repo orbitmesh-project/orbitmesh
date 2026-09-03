@@ -33,7 +33,7 @@ public sealed class ScheduledTaskRunner(
     // occurrences from here rather than from the epoch - otherwise a task created at 19:00 for a
     // "0 20 * * *" schedule would see zero occurrences until 20:00 as expected, but one created a
     // year into a daily schedule would immediately see hundreds of "missed" occurrences.
-    private readonly DateTime _startedAtUtc = DateTime.UtcNow;
+    private readonly DateTimeOffset _startedAtUtc = DateTimeOffset.UtcNow;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -75,7 +75,7 @@ public sealed class ScheduledTaskRunner(
         }
 
         var now = DateTime.UtcNow;
-        var from = task.LastRunUtc ?? _startedAtUtc;
+        var from = (task.LastRunUtc ?? _startedAtUtc).UtcDateTime;
         // toInclusive so an occurrence landing exactly on a tick boundary isn't pushed to next tick.
         var occurrences = cron.GetOccurrences(from, now, TimeZoneInfo.Local, fromInclusive: false, toInclusive: true).ToList();
         if (occurrences.Count == 0)
@@ -97,7 +97,7 @@ public sealed class ScheduledTaskRunner(
             logger.LogInformation("Scheduled task '{Name}' skipped {Count} missed occurrence(s) (CatchUpIfMissed is off).", task.Name, occurrences.Count);
         }
 
-        var lastOccurrence = occurrences[^1];
+        var lastOccurrence = new DateTimeOffset(occurrences[^1], TimeSpan.Zero);
         task.LastRunUtc = lastOccurrence;
         configWriter.Update(cfg =>
         {

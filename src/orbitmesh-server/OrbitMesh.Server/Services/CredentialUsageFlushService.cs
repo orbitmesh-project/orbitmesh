@@ -41,7 +41,7 @@ public sealed class CredentialUsageFlushService(
                         var when = tracker.GetLastUsed(name);
                         if (credential != null && when != null)
                         {
-                            credential.LastUsedUtc = when;
+                            credential.LastUsedUtc = new DateTimeOffset(when.Value, TimeSpan.Zero);
                         }
                     }
                 });

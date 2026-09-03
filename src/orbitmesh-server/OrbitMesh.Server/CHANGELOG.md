@@ -4,6 +4,24 @@ Format: [Keep a Changelog](https://keepachangelog.com/). Versions match `<Versio
 `OrbitMesh.Server.csproj`, which is what's reported to the update server (see
 `Services/ServerSelfUpdater.cs` and `Services/UpdateCheckService.cs`).
 
+## [1.2.16]
+
+### Fixed
+
+- `ScheduledTaskOptions.LastRunUtc` was silently corrupted every time it round-tripped through
+  config: `System.Text.Json` (the write path) serializes a UTC `DateTime` correctly, but
+  `Microsoft.Extensions.Configuration.Binder` (the read path used by `IOptionsMonitor`) parses that
+  same string with plain `DateTime.Parse`, which has no "Z" handling of its own and silently
+  reinterprets it as local time - shifting the stored instant by the machine's UTC offset every
+  time the option was re-read. On a task scheduled later in the day than the shift, this could push
+  the computed "last run" past the next due occurrence, so `ScheduledTaskRunner` saw zero
+  occurrences to catch up on and stopped firing entirely until a matching occurrence happened to
+  line up again by coincidence. `LastRunUtc` is now a `DateTimeOffset?`, which round-trips through
+  the same binder without reinterpretation.
+- `CredentialOptions.LastUsedUtc` had the identical `DateTime`/Configuration-Binder corruption -
+  same fix, now a `DateTimeOffset?`. Purely a display bug here (a wrong "Last Used" timestamp in
+  the Console's Credentials page), not a functional one.
+
 ## [1.2.15]
 
 ### Added

@@ -716,8 +716,8 @@ public sealed class ManagementController(
             c.Kind,
             c.Enable,
             c.Scopes,
-            LastUsedUtc = credentialUsageTracker.GetLastUsed(c.Name) is { } live && (c.LastUsedUtc == null || live > c.LastUsedUtc)
-                ? live
+            LastUsedUtc = credentialUsageTracker.GetLastUsed(c.Name) is { } live && (c.LastUsedUtc == null || live > c.LastUsedUtc.Value.UtcDateTime)
+                ? new DateTimeOffset(live, TimeSpan.Zero)
                 : c.LastUsedUtc
         }).Cast<object>().ToList();
 

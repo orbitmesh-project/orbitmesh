@@ -120,7 +120,11 @@ public sealed class CredentialOptions
     public AuthorizationOptions Authorizations { get; set; } = new();
 
     // Updated on a delay by CredentialUsageFlushService, not on every request - see there for why.
-    public DateTime? LastUsedUtc { get; set; }
+    //
+    // DateTimeOffset, not DateTime: see ScheduledTaskOptions.LastRunUtc's comment - the Configuration
+    // binder (IOptionsMonitor's read path) silently corrupts a "...Z" DateTime string's Kind and
+    // clock value on every read. DateTimeOffset round-trips through the same binder correctly.
+    public DateTimeOffset? LastUsedUtc { get; set; }
 }
 
 public sealed class AuthorizationOptions
@@ -252,5 +256,5 @@ public sealed class ScheduledTaskOptions
 
     // Updated by ScheduledTaskRunner after every fire (or skipped-but-acknowledged occurrence) - not
     // meant to be hand-edited, but visible so an admin can see when a task last actually ran.
-    public DateTime? LastRunUtc { get; set; }
+    public DateTimeOffset? LastRunUtc { get; set; }
 }
