@@ -4,6 +4,17 @@ Format: [Keep a Changelog](https://keepachangelog.com/). Versions match `<Versio
 `OrbitMesh.Common.csproj`, which is what gets published to
 [nuget.org](https://www.nuget.org/packages/OrbitMesh.Common).
 
+## [1.2.3]
+
+### Fixed
+
+- `RegisterMessageHandlers`'s dispatch error path built its `WriteError` message by concatenating a
+  handler's own exception message directly into what became the composite format string - a handler
+  exception containing literal `{`/`}` (e.g. an ffmpeg error like `"...not one of 40{0,1,3,4}..."`,
+  hit by a real package) crashed `string.Format` itself with a secondary `FormatException`, replacing
+  the actual error in the log with a confusing, unrelated stack trace. Now passes the message key and
+  exception message as `{0}`/`{1}` arguments instead of folding them into the format string.
+
 ## [1.2.2] - 2026-08-21
 
 ### Fixed

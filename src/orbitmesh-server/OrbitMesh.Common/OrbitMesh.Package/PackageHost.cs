@@ -359,11 +359,16 @@ public static class PackageHost
                 }
                 catch (ArgumentOutOfRangeException)
                 {
-                    WriteError("Unable to dispath the message " + messageKey + " : invalid argument count");
+                    WriteError("Unable to dispatch the message {0} : invalid argument count", messageKey);
                 }
                 catch (Exception ex)
                 {
-                    WriteError("Unable to dispath the message " + messageKey + " : " + ex.Message);
+                    // messageKey/ex.Message as {0}/{1} arguments, not concatenated into the format
+                    // string itself - a handler's exception message can contain literal "{"/"}" (e.g.
+                    // an ffmpeg error like "...not one of 40{0,1,3,4}..."), which previously became
+                    // part of what string.Format tried to parse AS a composite format string and threw
+                    // a secondary FormatException that replaced the real error in the log entirely.
+                    WriteError("Unable to dispatch the message {0} : {1}", messageKey, ex.Message);
                 }
                 if (result != null && MessageContext.Current.IsSaga)
                 {
