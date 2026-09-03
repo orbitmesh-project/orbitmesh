@@ -3,6 +3,18 @@
 Format: [Keep a Changelog](https://keepachangelog.com/). Versions match the `VERSION` file at
 the root of this project, bumped by `cicd/release-static-site.ps1`.
 
+## [1.2.11]
+
+### Fixed
+
+- The Messages page showed the package name instead of the handler's own name (e.g. "OnvifDoods"
+  instead of "DetectNow") for any non-shared handler. `store.js` built its internal dictionary key by
+  re-prefixing the package name onto `MessageKey`, which the Server already sends fully qualified
+  (`"PackageName/key"`) - producing a double-qualified key ("PackageName/PackageName/key") that broke
+  `key.split('/')[1]`'s assumption of exactly one slash. Now derives the displayed name from
+  `MessageHandler.MessageKey` directly (`.split('/').pop()`), which is correct regardless of
+  qualification. Invoking a handler was never affected - that path already used `MessageKey` directly.
+
 ## [1.2.10]
 
 ### Added

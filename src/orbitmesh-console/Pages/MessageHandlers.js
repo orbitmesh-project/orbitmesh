@@ -129,7 +129,7 @@ export default {
                 <h3>{{ pkg }}</h3>
                 <div v-for="[key, entry] in handlers" :key="key" class="handler-row">
                     <div class="handler-info">
-                        <strong>{{ key.split('/')[1] }}</strong>
+                        <strong>{{ entry.MessageHandler.MessageKey.split('/').pop() }}</strong>
                         <div v-if="entry.MessageHandler.Description" class="empty">{{ entry.MessageHandler.Description }}</div>
                     </div>
                     <div class="handler-params">
