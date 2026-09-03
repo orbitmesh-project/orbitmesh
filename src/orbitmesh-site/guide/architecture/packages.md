@@ -1,5 +1,7 @@
 # Package repository & distribution
 
+![Packages page listing installed packages per edge, with status/version/resource usage](/screenshots/packages.jpg)
+
 The Server's package repository accepts a package two ways:
 
 - **Manual `.zip` upload.**

@@ -1,5 +1,7 @@
 # Tâches planifiées
 
+![Page Scheduled Tasks - formulaire d'ajout et tableau des tâches configurées avec cron, cible et dernière exécution](/screenshots/scheduled-tasks.jpg)
+
 Envoie un message selon un horaire cron (Console → Administration → Scheduled Tasks) - l'équivalent automatisé d'un humain qui ouvre la page Messages et clique sur Invoke.
 
 ## Comment ça s'exécute

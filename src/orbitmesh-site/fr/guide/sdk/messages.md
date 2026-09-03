@@ -9,6 +9,10 @@ public SunInfo GetSunInfo(DateOnly date, int timezone, double latitude, double l
 
 Appelez `PackageHost.RegisterMessageHandlers(this)` une fois, typiquement dans `OnStart`, pour connecter chaque méthode `[MessageHandler]` d'une instance.
 
+Chaque handler enregistré apparaît sur la page Messages de la Console, avec un formulaire généré à partir de ses paramètres déclarés - pratique pour tester un handler à la main, et c'est la même source de données dans laquelle les [tâches planifiées](/fr/guide/architecture/scheduled-tasks) choisissent une cible :
+
+![Page Messages listant les handlers enregistrés avec formulaires de paramètres générés](/screenshots/messages.jpg)
+
 ## Namespacing de la clé
 
 La clé est namespacée sous le nom du package par défaut : `"DayInfo/GetSunInfo"` ici, pas `"GetSunInfo"`. Deux packages sans rapport qui choisissent la même clé ne peuvent pas déclencher accidentellement le handler de l'autre. L'appelant utilise la clé qualifiée :

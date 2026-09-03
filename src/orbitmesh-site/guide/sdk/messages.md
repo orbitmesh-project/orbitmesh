@@ -9,6 +9,10 @@ public SunInfo GetSunInfo(DateOnly date, int timezone, double latitude, double l
 
 Call `PackageHost.RegisterMessageHandlers(this)` once, typically in `OnStart`, to wire up every `[MessageHandler]` method on an instance.
 
+Every registered handler shows up on the Console's Messages page, with a form generated from its declared parameters - useful for testing a handler by hand, and it's the same data source [Scheduled Tasks](/guide/architecture/scheduled-tasks) picks a target from:
+
+![Messages page listing registered handlers with generated parameter forms](/screenshots/messages.jpg)
+
 ## Key namespacing
 
 The key is namespaced under the package's own name by default: `"DayInfo/GetSunInfo"` here, not `"GetSunInfo"`. Two unrelated packages picking the same key can't cross-trigger each other's handler. Callers use the qualified key:

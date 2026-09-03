@@ -1,5 +1,7 @@
 # Scheduled Tasks
 
+![Scheduled Tasks page - add form plus a table of configured tasks with cron, target and last run](/screenshots/scheduled-tasks.jpg)
+
 Fires a message on a cron schedule (Console → Administration → Scheduled Tasks) - the automation equivalent of a human opening the Messages page and clicking Invoke.
 
 ## How it runs

@@ -1,5 +1,7 @@
 # Variables
 
+![Page Variables - une liste nom/valeur, secrets cachés derrière Reveal](/screenshots/variables.jpg)
+
 Des valeurs nommées (Console → Variables) que les settings de n'importe quel package peuvent référencer avec un token `{Nom}`, n'importe où dans une valeur - y compris à l'intérieur d'un setting JSON. Marche que le package expose un setting plat `Latitude` ou l'enfouisse dans un bloc de config plus large.
 
 Changez une Variable une fois. Chaque package qui la référence récupère le changement - aucune édition par package.

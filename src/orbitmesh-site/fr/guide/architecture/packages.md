@@ -1,5 +1,7 @@
 # Dépôt de packages et distribution
 
+![Page Packages listant les packages installés par edge, avec statut/version/utilisation ressources](/screenshots/packages.jpg)
+
 Le dépôt de packages du Server accepte un package de deux façons :
 
 - **Upload manuel de `.zip`.**

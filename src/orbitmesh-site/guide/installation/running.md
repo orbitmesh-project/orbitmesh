@@ -39,6 +39,8 @@ Each device that runs packages needs its own Edge process, pointed at the Server
 
 No credential needed up front. Start the Edge with an empty (or wrong) `OrbitMeshAccessKey` and it shows up under **Edges → Pending edges** in the Console, identified by a GUID it generates and persists on first run (`instance-id.txt`). The ID stays stable across reconnects, before it has a recognizable name.
 
+![Edges page - a connected edge with its OS, runtime/agent version, credential and package count](/screenshots/edges.jpg)
+
 Approve it in the Console (editable name, defaults to what it reported). The Server creates a matching credential and pushes the AccessKey straight back down the Edge's own connection - it saves it to `appsettings.json` and reconnects on its own. No copy-pasting.
 
 If the Edge isn't still connected when you approve it, the Console shows the generated key once, to paste in by hand.
