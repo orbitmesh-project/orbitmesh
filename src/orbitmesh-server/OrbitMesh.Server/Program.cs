@@ -76,7 +76,10 @@ builder.Services.AddControllers().AddJsonOptions(o =>
     o.JsonSerializerOptions.Converters.Add(new OrbitMesh.Server.Services.FlexibleStringDictionaryConverter());
 });
 builder.Services.AddOpenApi();
-builder.Services.AddSignalR().AddJsonProtocol(o =>
+builder.Services.AddSignalR(o =>
+{
+    o.MaximumReceiveMessageSize = 4 * 1024 * 1024;
+}).AddJsonProtocol(o =>
 {
     o.PayloadSerializerOptions.PropertyNamingPolicy = null;
     o.PayloadSerializerOptions.Converters.Add(new JsonStringEnumConverter());

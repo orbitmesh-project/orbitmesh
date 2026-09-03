@@ -4,6 +4,17 @@ Format: [Keep a Changelog](https://keepachangelog.com/). Versions match `<Versio
 `OrbitMesh.Server.csproj`, which is what's reported to the update server (see
 `Services/ServerSelfUpdater.cs` and `Services/UpdateCheckService.cs`).
 
+## [1.2.17]
+
+### Fixed
+
+- SignalR's own default `MaximumReceiveMessageSize` (32KB) was never overridden, so any package
+  sending a message or Telemetry Item bigger than that (e.g. a base64-encoded camera snapshot, ~30KB
+  JPEG -> ~40KB+ once base64/JSON-wrapped) had its connection silently killed mid-send - with no
+  exception surfaced to the sending client, whose `InvokeAsync` call just hung forever instead of
+  failing cleanly. Raised to 4MB, comfortably covering a reasonably-sized payload without allowing
+  arbitrarily large messages.
+
 ## [1.2.16]
 
 ### Fixed

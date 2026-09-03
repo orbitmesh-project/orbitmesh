@@ -5,7 +5,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <!-- Reported to the console and to the update server (see Services/UpdateCheckService.cs) -
          bump this on every release meant to be offered as a self-update. -->
-    <Version>1.2.16</Version>
+    <Version>1.2.17</Version>
     <!-- ServerVersion.Current reads this - without it the SDK appends "+<git-sha>", which breaks
          UpdateVersionComparer's exact-match fallback and shows an update as available forever. -->
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
