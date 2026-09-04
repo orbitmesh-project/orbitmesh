@@ -96,10 +96,18 @@ public sealed class OrbitMeshHub(
 
     public async Task SendMessage(MessageScope scope, string key, object? data)
     {
-        if (!HasScope(OrbitMeshScope.MessagesExecute) || !directory.CheckMessageAuthorization(Context.GetAccessKey(), scope, key))
+        var requester = $"{Context.GetEdgeName()}/{Context.GetPackageName()}";
+        if (!HasScope(OrbitMeshScope.MessagesExecute))
         {
+            logger.LogWarning("Message denied (missing messages:execute scope): {Requester} -> {Scope} '{Key}'", requester, scope, key);
             return;
         }
+        if (!directory.CheckMessageAuthorization(Context.GetAccessKey(), scope, key))
+        {
+            logger.LogWarning("Message denied (Authorizations.Messages): {Requester} -> {Scope} '{Key}' - check that requester's credential", requester, scope, key);
+            return;
+        }
+        logger.LogInformation("Message allowed: {Requester} -> {Scope} '{Key}'", requester, scope, key);
         var sender = new MessageSender { Type = MessageSender.SenderType.OrbitMeshHub, ConnectionId = Context.ConnectionId, FriendlyName = Context.GetPackageInstanceId() };
         if (scope.IsSaga && key != OrbitMeshDefaultNames.SagaResponseMessageKey)
         {
@@ -144,9 +152,17 @@ public sealed class OrbitMeshHub(
 
     public void SubscribeTelemetryItems(string edgeName, string packageName, string name, string type)
     {
+        var requester = $"{Context.GetEdgeName()}/{Context.GetPackageName()}";
         if (directory.CheckTelemetryItemAuthorization(Context.GetAccessKey(), edgeName, packageName, name))
         {
             groupManager.Add(Context.ConnectionId, $"SO/{edgeName}/{packageName}/{name}/{type}");
+            logger.LogInformation("Telemetry subscription allowed: {Requester} -> {EdgeName}/{PackageName}/{Name}",
+                requester, edgeName, packageName, name);
+        }
+        else
+        {
+            logger.LogWarning("Telemetry subscription denied: {Requester} -> {EdgeName}/{PackageName}/{Name} - check that requester's credential Authorizations.TelemetryItems",
+                requester, edgeName, packageName, name);
         }
     }
 

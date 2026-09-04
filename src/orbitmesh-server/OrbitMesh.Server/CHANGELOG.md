@@ -4,6 +4,22 @@ Format: [Keep a Changelog](https://keepachangelog.com/). Versions match `<Versio
 `OrbitMesh.Server.csproj`, which is what's reported to the update server (see
 `Services/ServerSelfUpdater.cs` and `Services/UpdateCheckService.cs`).
 
+## [1.2.18]
+
+### Added
+
+- `OrbitMeshHub.SubscribeTelemetryItems` now logs both outcomes (allowed/denied) of the
+  `Authorizations.TelemetryItems` check it already ran but never reported - a denied subscription
+  previously failed completely silently (no exception, no response to the caller), which made a
+  deny-by-default Telemetry policy impossible to verify from the outside. Logged via the Server's own
+  `ILogger` (console/file), not the Console's per-package log page.
+- `OrbitMeshHub.SendMessage` had the exact same silent-denial gap 1.2.18 fixed for Telemetry
+  subscriptions, for Messages: neither a missing `messages:execute` scope nor a failing
+  `Authorizations.Messages` rule logged anything, and `PackageHost.SendMessage` is fire-and-forget on
+  the sending side, so a denied message looked identical to a delivered one from the sender's own log
+  (confirmed against a real credential: the sender logged "sent", nothing ever arrived). Now logs all
+  three outcomes (missing scope / failed rule / allowed) via the Server's own `ILogger`.
+
 ## [1.2.17]
 
 ### Fixed
