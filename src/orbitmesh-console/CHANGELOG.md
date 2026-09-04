@@ -3,6 +3,13 @@
 Format: [Keep a Changelog](https://keepachangelog.com/). Versions match the `VERSION` file at
 the root of this project, bumped by `cicd/release-static-site.ps1`.
 
+## [1.2.13]
+
+### Changed
+
+- The top nav bar now stays visible while scrolling a long page (`position: sticky`) instead of
+  scrolling away with the content.
+
 ## [1.2.12]
 
 ### Added
