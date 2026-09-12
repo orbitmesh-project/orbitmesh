@@ -9,6 +9,13 @@ export default defineConfig({
   base: "/",
   cleanUrls: true,
   lastUpdated: true,
+  // Built into VitePress (powered by the "sitemap" package, already a vitepress dependency) - crawls
+  // every rendered route including /fr/, no separate per-locale config needed. lastUpdated above
+  // feeds each entry's <lastmod>. See public/robots.txt for the line that actually points crawlers
+  // at this file - Google/Bing don't discover a sitemap on their own without it.
+  sitemap: {
+    hostname: "https://orbitmesh.org"
+  },
 
   locales: {
     root: {
