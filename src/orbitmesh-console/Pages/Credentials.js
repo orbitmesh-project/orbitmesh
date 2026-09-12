@@ -343,6 +343,7 @@ export default {
             <div v-if="lockedIps.length > 0" class="deploy-form">
                 <h3>Locked-out IPs</h3>
                 <p style="margin-top:-4px;color:var(--text-muted,#888)">Too many failed AccessKey attempts (brute-force protection) - blocked regardless of what credential they try next, until the lockout expires or is cleared here.</p>
+                <div class="table-scroll">
                 <table class="data-table">
                     <thead>
                         <tr><th>IP</th><th style="width:140px">Failed attempts</th><th style="width:200px">Locked until</th><th style="width:120px">Actions</th></tr>
@@ -358,6 +359,7 @@ export default {
                         </tr>
                     </tbody>
                 </table>
+                </div>
             </div>
             <p>
                 <input v-model="filter" placeholder="Filter by name" style="width: 260px;" />
@@ -367,6 +369,7 @@ export default {
                     <option value="Human">Human</option>
                 </select>
             </p>
+            <div class="table-scroll">
             <table class="data-table">
                 <thead>
                     <tr>
@@ -491,6 +494,7 @@ export default {
                     <tr v-if="filtered.length === 0"><td colspan="6" class="empty">No credentials yet.</td></tr>
                 </tbody>
             </table>
+            </div>
             <modal :show="!!revealDialog" :title="revealDialog ? revealDialog.name + ' - ' + revealDialog.label : ''" @close="closeReveal">
                 <template v-if="revealDialog">
                     <p>This is shown <strong>once</strong>. Copy it now - it cannot be displayed again afterwards.</p>

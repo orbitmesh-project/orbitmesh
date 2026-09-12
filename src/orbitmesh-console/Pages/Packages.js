@@ -364,6 +364,7 @@ export default {
 
             <div v-for="(packages, edgeName) in byEdge" :key="edgeName" class="package-group">
                 <h3>{{ edgeName }}</h3>
+                <div class="table-scroll">
                 <table class="data-table">
                     <thead>
                         <tr><th>Name</th><th style="width:110px">Status</th><th style="width:90px">Version</th><th style="width:80px">CPU</th><th style="width:100px">RAM</th><th style="width:390px">Actions</th></tr>
@@ -428,6 +429,7 @@ export default {
                         </template>
                     </tbody>
                 </table>
+                </div>
             </div>
             <p v-if="Object.keys(byEdge).length === 0" class="empty">No packages reported yet.</p>
 

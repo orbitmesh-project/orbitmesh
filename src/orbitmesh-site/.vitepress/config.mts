@@ -3,9 +3,10 @@ import { defineConfig } from "vitepress";
 export default defineConfig({
   title: "OrbitMesh",
   description: "A stateless, self-hosted hub for edge devices and home automation packages.",
-  // GitHub Pages project site (no custom domain/CNAME): served at /orbitmesh/, not the root -
-  // every generated asset/link needs this prefix or the deployed site 404s on its own JS/CSS.
-  base: "/orbitmesh/",
+  // Served from the custom domain orbitmesh.org (see public/CNAME) at the root, not GitHub's own
+  // project-site path (username.github.io/orbitmesh/) - base stays "/" accordingly. Changing this
+  // back would 404 every generated asset/link without also removing the CNAME file.
+  base: "/",
   cleanUrls: true,
   lastUpdated: true,
 

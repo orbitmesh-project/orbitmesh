@@ -5,7 +5,7 @@ staged files into place, then relaunches it (directly, or via the service manage
 `ProcessRestarter.cs`). Never self-updates itself, but still ships a signed manifest since most
 release/update tooling expects one.
 
-See [Recovery & updates](https://orbitmesh-project.github.io/orbitmesh/guide/architecture/recovery-updates)
+See [Recovery & updates](https://orbitmesh.org/guide/architecture/recovery-updates)
 for the full self-update flow.
 
 ## Releasing

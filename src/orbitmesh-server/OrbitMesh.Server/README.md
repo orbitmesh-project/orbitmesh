@@ -5,19 +5,19 @@ variables, package assignments, and the package repository. Exposes four SignalR
 `OrbitMeshHub`, `ControlHub`, `ConsumerHub`) and the Management REST API, and serves the Console (and
 any other configured static site) via `FileServers`.
 
-See [Architecture overview](https://orbitmesh-project.github.io/orbitmesh/guide/architecture/) for
+See [Architecture overview](https://orbitmesh.org/guide/architecture/) for
 the full picture.
 
 ## Configuration
 
 `appsettings.json` (copy from `appsettings.json.example`) - see
-[Access control](https://orbitmesh-project.github.io/orbitmesh/guide/architecture/access-control)
-and [Variables](https://orbitmesh-project.github.io/orbitmesh/guide/architecture/variables).
+[Access control](https://orbitmesh.org/guide/architecture/access-control)
+and [Variables](https://orbitmesh.org/guide/architecture/variables).
 
 ## Running it
 
-See [Running Server & Edge](https://orbitmesh-project.github.io/orbitmesh/guide/installation/running)
-and [Background service setup](https://orbitmesh-project.github.io/orbitmesh/guide/installation/background-service).
+See [Running Server & Edge](https://orbitmesh.org/guide/installation/running)
+and [Background service setup](https://orbitmesh.org/guide/installation/background-service).
 
 ## Releasing
 

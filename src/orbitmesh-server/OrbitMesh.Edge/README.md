@@ -12,8 +12,8 @@ self-update.
 
 ## Running it
 
-See [Running Server & Edge](https://orbitmesh-project.github.io/orbitmesh/guide/installation/running)
-and [Background service setup](https://orbitmesh-project.github.io/orbitmesh/guide/installation/background-service).
+See [Running Server & Edge](https://orbitmesh.org/guide/installation/running)
+and [Background service setup](https://orbitmesh.org/guide/installation/background-service).
 
 ## Releasing
 

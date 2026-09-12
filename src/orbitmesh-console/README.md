@@ -9,7 +9,7 @@ process.
 ## Running it
 
 Nothing to build - point the Server's `fileServers` entry at this folder and it's served. See
-[Quick install](https://orbitmesh-project.github.io/orbitmesh/guide/installation/).
+[Quick install](https://orbitmesh.org/guide/installation/).
 
 ## Releasing
 

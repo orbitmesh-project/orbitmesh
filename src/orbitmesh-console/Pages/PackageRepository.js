@@ -169,6 +169,7 @@ export default {
                 </template>
             </modal>
 
+            <div class="table-scroll">
             <table class="data-table">
                 <thead>
                     <tr><th style="width:140px">Name</th><th style="width:80px">Version</th><th style="width:80px">Runtime</th><th>Description</th><th style="width:110px">Feed</th><th style="width:160px">File</th><th style="width:90px">Size</th><th style="width:170px">Last update</th><th style="width:340px">Actions</th></tr>
@@ -210,6 +211,7 @@ export default {
                     </tr>
                 </tbody>
             </table>
+            </div>
         </div>
     `
 };

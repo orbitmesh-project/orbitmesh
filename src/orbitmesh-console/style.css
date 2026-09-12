@@ -185,7 +185,18 @@ nav a.router-link-active { color: var(--text); background: var(--border); }
    naturally wraps to absorb the extra space - the table then renders narrower than its container,
    leaving a large empty gap on the right. Fixed layout sizes columns from the header row instead
    (see each table's Actions <th> for its explicit width) and always honors width:100%. */
-.data-table { width: 100%; table-layout: fixed; border-collapse: collapse; margin-bottom: 20px; }
+.data-table { width: 100%; min-width: max-content; table-layout: fixed; border-collapse: collapse; margin-bottom: 20px; }
+/* Every fixed-width column keeps its own px width no matter how narrow the viewport gets - once
+   their sum exceeds the available width (Package Repository's ~1170px is the widest table in the
+   app), the one column left without an explicit width gets squeezed to near-zero and its text wraps
+   a character or two per line, instead of the table just overflowing - width:100% alone always
+   shrinks the table to fit its container, so there's nothing for a scroll container to scroll
+   without also telling the table its own minimum width. min-width:max-content restores that (a
+   table-layout:fixed table's "natural" width is the sum of its explicit column widths), and wrapping
+   it in .table-scroll below lets it scroll horizontally instead of squeezing - confirmed both ways
+   against the app's own real column-width recipe: still width:100% (not stuck at min-content) once
+   the viewport is wide enough, genuinely scrollable once it isn't. */
+.table-scroll { overflow-x: auto; }
 .data-table th, .data-table td { text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--border); overflow-wrap: break-word; }
 .data-table th { color: var(--text-muted); font-weight: 500; text-transform: uppercase; font-size: 0.8em; }
 

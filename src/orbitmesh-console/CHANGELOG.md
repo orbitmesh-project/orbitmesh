@@ -3,6 +3,20 @@
 Format: [Keep a Changelog](https://keepachangelog.com/). Versions match the `VERSION` file at
 the root of this project, bumped by `cicd/release-static-site.ps1`.
 
+## [1.2.14]
+
+### Fixed
+
+- Every `data-table` (Package Repository, Credentials, Edges, Packages, Scheduled Tasks, Variables,
+  Telemetry) shrank its one flexible column to near-zero on a narrow viewport instead of the table
+  just staying readable - `width:100%` always shrinks a `table-layout:fixed` table to fit its
+  container, squeezing whichever column has no explicit width until its text wraps a character or
+  two per line (Package Repository, the widest table at ~1170px of fixed columns, hit this first).
+  Each table is now wrapped in a horizontally-scrollable container, and `min-width:max-content` lets
+  the table reach its natural width (the sum of its explicit column widths) before that scrolling
+  kicks in - confirmed both ways: still `width:100%` when the viewport is wide enough, genuinely
+  scrollable instead of squeezed when it isn't.
+
 ## [1.2.13]
 
 ### Changed

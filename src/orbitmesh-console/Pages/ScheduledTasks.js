@@ -202,6 +202,7 @@ export default {
                 </div>
                 <button :disabled="creating" @click="createTask">{{ creating ? 'Adding...' : 'Add' }}</button>
             </div>
+            <div class="table-scroll">
             <table class="data-table">
                 <thead>
                     <tr>
@@ -257,6 +258,7 @@ export default {
                     <tr v-if="tasks.length === 0"><td colspan="7" class="empty">No scheduled tasks yet.</td></tr>
                 </tbody>
             </table>
+            </div>
         </div>
     `
 };

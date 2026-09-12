@@ -166,6 +166,7 @@ export default {
             </div>
             <div v-for="(objects, groupKey) in grouped" :key="groupKey" class="package-group">
                 <h3>{{ groupKey }}</h3>
+                <div class="table-scroll">
                 <table class="data-table so-table">
                     <thead>
                         <tr><th>Name</th><th>Value</th><th>Type</th><th>Validity</th><th>Last update</th><th>Actions</th></tr>
@@ -181,6 +182,7 @@ export default {
                         </tr>
                     </tbody>
                 </table>
+                </div>
             </div>
             <p v-if="Object.keys(grouped).length === 0" class="empty">No telemetry items yet.</p>
             <modal :show="viewing !== null" :title="viewing ? viewing.EdgeName + '/' + viewing.PackageName + '/' + viewing.Name : ''" @close="viewingKey = null">

@@ -6,7 +6,7 @@ Run small automation packages - weather feeds, network tools, smart-home integra
 you write yourself - on your own devices, managed from one place. No database, no history: the
 Console always shows the current state a package last reported.
 
-**[Documentation](https://orbitmesh-project.github.io/orbitmesh/)** · **[Official packages](https://orbitmesh-project.github.io/orbitmesh/packages)**
+**[Documentation](https://orbitmesh.org/)** · **[Official packages](https://orbitmesh.org/packages)**
 
 ## Components
 
@@ -27,7 +27,7 @@ sudo ./cicd/install.sh          # Linux/systemd
 .\cicd\install.ps1               # Windows, elevated prompt
 ```
 
-See the [Quick install guide](https://orbitmesh-project.github.io/orbitmesh/guide/installation/) for details, or [Building a package](https://orbitmesh-project.github.io/orbitmesh/guide/sdk/) to write your own.
+See the [Quick install guide](https://orbitmesh.org/guide/installation/) for details, or [Building a package](https://orbitmesh.org/guide/sdk/) to write your own.
 
 ## Acknowledgments
 

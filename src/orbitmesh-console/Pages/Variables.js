@@ -90,7 +90,8 @@ export default {
 
             <div v-if="loading" class="empty">Loading...</div>
             <template v-else>
-                <table class="data-table" v-if="variables.length > 0">
+                <div class="table-scroll" v-if="variables.length > 0">
+                <table class="data-table">
                     <thead>
                         <tr><th style="width:200px">Name</th><th>Value</th><th style="width:80px">Secret</th><th style="width:260px">Actions</th></tr>
                     </thead>
@@ -127,6 +128,7 @@ export default {
                         </template>
                     </tbody>
                 </table>
+                </div>
                 <p v-else class="empty">No variables yet.</p>
 
                 <h3 style="margin-top:24px">Create a new variable</h3>

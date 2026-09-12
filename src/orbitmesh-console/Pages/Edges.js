@@ -183,6 +183,7 @@ export default {
             <div v-if="store.managementAvailable && pendingEdges.length > 0" class="deploy-form">
                 <h3>Pending edges</h3>
                 <p style="margin-top:-4px;color:var(--text-muted,#888)">Connected but not yet authorized - a matching credential and edge entry are created for you on approval.</p>
+                <div class="table-scroll">
                 <table class="data-table">
                     <thead>
                         <tr><th>Declared name</th><th style="width:140px">From</th><th style="width:150px">First seen</th><th style="width:150px">Last seen</th><th style="width:260px">Approve as</th><th style="width:160px">Actions</th></tr>
@@ -201,7 +202,9 @@ export default {
                         </tr>
                     </tbody>
                 </table>
+                </div>
             </div>
+            <div class="table-scroll">
             <table class="data-table">
                 <thead>
                     <tr><th style="width:150px">Name</th><th style="width:130px">Status</th><th style="width:150px">Machine</th><th>OS</th><th style="width:90px">Runtime</th><th style="width:90px">Version</th><th style="width:130px">Credential</th><th style="width:90px">Packages</th><th style="width:420px">Actions</th></tr>
@@ -241,6 +244,7 @@ export default {
                     <tr v-if="edgeList.length === 0"><td colspan="9" class="empty">No edge connected yet.</td></tr>
                 </tbody>
             </table>
+            </div>
             <modal :show="!!revealDialog" :title="revealDialog ? revealDialog.name + ' - ' + revealDialog.label : ''" @close="closeReveal">
                 <template v-if="revealDialog">
                     <p v-if="revealDialog.pushed">Sent to the edge automatically - it should reconnect shortly. This is shown too as a fallback in case it wasn't still connected to receive it; copy it now, it won't be shown again.</p>
