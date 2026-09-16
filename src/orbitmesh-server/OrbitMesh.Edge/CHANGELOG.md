@@ -4,6 +4,17 @@ Format: [Keep a Changelog](https://keepachangelog.com/). Versions match `<Versio
 `OrbitMesh.Edge.csproj`, which is what's reported to the update server (see
 `Services/EdgeSelfUpdater.cs` and `Services/EdgeUpdateCheckService.cs`).
 
+## [1.1.6]
+
+### Changed
+
+- When the initial connect to the OrbitMesh server fails (not yet approved, or the server/network is
+  briefly unreachable), the Edge now falls back to polling the server's new REST enrollment endpoint
+  (`rest/enroll`, every 5s) instead of relying on a kept-open, unauthorized SignalR connection to
+  receive a pushed AccessKey once an admin approves it. Once the poll reports `approved`, the Edge
+  applies the new AccessKey and restarts exactly as before - only how it learns about the approval
+  changed.
+
 ## [1.1.5]
 
 ### Fixed

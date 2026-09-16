@@ -4,6 +4,25 @@ Format: [Keep a Changelog](https://keepachangelog.com/). Versions match `<Versio
 `OrbitMesh.Server.csproj`, which is what's reported to the update server (see
 `Services/ServerSelfUpdater.cs` and `Services/UpdateCheckService.cs`).
 
+## [1.2.19]
+
+### Changed
+
+- Replaced the pending-Edge approval flow's SignalR-push mechanism with a plain REST poll: a new
+  unauthenticated `POST rest/enroll` (records the attempt) + `GET rest/enroll/{instanceId}/status`
+  (polled every few seconds by the Edge) let an unapproved Edge learn about its approval without
+  keeping a live, unauthorized SignalR connection open and waiting on `EdgeHub.OnConnectedAsync` to
+  push a credential down it. `EdgeHub` now aborts an unauthorized connection outright instead of
+  special-casing a "pending" one that stays open.
+- This also fixes a latent bug in the old push path: `ApprovePendingEdge` pushed the new AccessKey
+  via `edgeHub.Clients.Client(pending.ConnectionId).SendAsync(...)`, which does **not** throw for a
+  stale/disconnected ConnectionId - `pushed: true` could come back to the Console even when nothing
+  actually received the key. The new flow has no such race: the Edge fetches the key itself on its
+  next status poll, whenever that happens to land.
+- `PendingEdgeRegistry` now keeps an approved entry around (with the new key attached) instead of
+  removing it immediately, so a poll after approval can still find it - purged either when the Edge
+  reconnects for real over SignalR with the new key, or after 10 minutes, whichever comes first.
+
 ## [1.2.18]
 
 ### Added

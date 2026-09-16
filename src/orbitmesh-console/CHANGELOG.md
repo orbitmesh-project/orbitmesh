@@ -3,6 +3,14 @@
 Format: [Keep a Changelog](https://keepachangelog.com/). Versions match the `VERSION` file at
 the root of this project, bumped by `cicd/release-static-site.ps1`.
 
+## [1.2.15]
+
+### Changed
+
+- The pending-edges "Access Key" reveal dialog no longer says the key was pushed to the edge
+  automatically - the server's approval flow no longer pushes it over a live connection at all, the
+  edge now picks it up on its own next status poll (see OrbitMesh.Server's changelog).
+
 ## [1.2.14]
 
 ### Fixed

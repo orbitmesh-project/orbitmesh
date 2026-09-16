@@ -43,36 +43,15 @@ public sealed class EdgeHub(
         }
 
         metrics.AccessDenied();
-        var edgeName = Context.GetEdgeName();
-        var instanceId = Context.GetInstanceId();
-        if (string.IsNullOrEmpty(edgeName) || string.IsNullOrEmpty(instanceId))
-        {
-            // No InstanceId - not a modern Edge build, reject as before.
-            logger.LogWarning(
-                "EdgeHub connection rejected for EdgeName={EdgeName}. " +
-                "Add a matching entry under OrbitMesh:Edges in appsettings.json with a valid Credential.",
-                edgeName);
-            Context.Abort();
-            return;
-        }
-
-        // Unrecognized but well-formed - kept open (not aborted) so an approval can push the new
-        // credential down this same connection. Every other hub method checks IsAuthorized() itself.
-        RecordPendingAttempt(instanceId, edgeName);
-        await base.OnConnectedAsync();
-    }
-
-    // An already-approved Edge never shows as pending again, even if a stale cached key from a
-    // race causes one more unauthorized call - nothing else would clear it after that.
-    private void RecordPendingAttempt(string instanceId, string edgeName)
-    {
-        if (directory.Current.Edges.Any(e => e.InstanceId == instanceId))
-        {
-            pendingEdgeRegistry.Remove(instanceId);
-            return;
-        }
-        var remoteIp = Context.GetHttpContext()?.Connection.RemoteIpAddress?.ToString() ?? "?";
-        pendingEdgeRegistry.RecordAttempt(instanceId, edgeName, remoteIp, Context.ConnectionId);
+        // Not (yet) authorized - reject outright rather than keeping the connection open. An
+        // unapproved/misconfigured Edge now falls back to REST enrollment (EnrollmentController)
+        // instead of waiting on this connection for an approval push.
+        logger.LogWarning(
+            "EdgeHub connection rejected for EdgeName={EdgeName}. " +
+            "Add a matching entry under OrbitMesh:Edges in appsettings.json with a valid Credential, " +
+            "or wait for its REST enrollment (rest/enroll) to be approved from the Console.",
+            Context.GetEdgeName());
+        Context.Abort();
     }
 
     public override async Task OnDisconnectedAsync(Exception? exception)
@@ -98,11 +77,8 @@ public sealed class EdgeHub(
     {
         if (!IsAuthorized())
         {
-            // Still pending - the Edge retries this every 3s, which doubles as a heartbeat.
-            if (Context.GetInstanceId() is { Length: > 0 } instanceId && Context.GetEdgeName() is { Length: > 0 } pendingEdgeName)
-            {
-                RecordPendingAttempt(instanceId, pendingEdgeName);
-            }
+            // Defensive only - OnConnectedAsync aborts an unauthorized connection before it can ever
+            // reach this call.
             return false;
         }
 

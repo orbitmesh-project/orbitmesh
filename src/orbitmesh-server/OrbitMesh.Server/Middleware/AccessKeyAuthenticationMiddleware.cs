@@ -63,6 +63,17 @@ public sealed class AccessKeyAuthenticationMiddleware(RequestDelegate next, ILog
             return;
         }
 
+        // An Edge that isn't approved yet (or has no valid AccessKey at all) has nothing to
+        // authenticate this gate with - that's exactly the case EnrollmentController exists for. It
+        // stays safe unauthenticated: enrolling only records a pending attempt for an admin to
+        // approve from the Console, nothing is disclosed except a key the admin just minted for that
+        // specific, already-approved InstanceId.
+        if (path.StartsWithSegments("/rest/enroll", StringComparison.OrdinalIgnoreCase))
+        {
+            await next(context);
+            return;
+        }
+
         var remoteIp = context.Connection.RemoteIpAddress;
         if (attemptLimiter.IsLockedOut(remoteIp))
         {

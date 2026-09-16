@@ -136,7 +136,7 @@ export default {
                 await store.loadEdges();
                 await store.loadCredentials();
                 this.revealAck = false;
-                this.revealDialog = { name: result.name, label: "Access Key", pushed: result.pushed, value: result.accessKey };
+                this.revealDialog = { name: result.name, label: "Access Key", value: result.accessKey };
             } finally {
                 this.approving[p.InstanceId] = false;
             }
@@ -247,8 +247,7 @@ export default {
             </div>
             <modal :show="!!revealDialog" :title="revealDialog ? revealDialog.name + ' - ' + revealDialog.label : ''" @close="closeReveal">
                 <template v-if="revealDialog">
-                    <p v-if="revealDialog.pushed">Sent to the edge automatically - it should reconnect shortly. This is shown too as a fallback in case it wasn't still connected to receive it; copy it now, it won't be shown again.</p>
-                    <p v-else>Copy this now - it won't be shown again. No open connection to push it to automatically; paste it into this edge's <code>appsettings.json</code> (<code>Edge.OrbitMeshAccessKey</code>) and restart it.</p>
+                    <p>The edge picks this up automatically on its next status poll (within ~5s) and restarts. Copy it now, it won't be shown again - this is also the value to paste into this edge's <code>appsettings.json</code> (<code>Edge.OrbitMeshAccessKey</code>) if it needs to be applied by hand.</p>
                     <p><input :value="revealDialog.value" readonly style="width:100%;font-family:monospace" @focus="$event.target.select()" /></p>
                     <button type="button" @click="copyRevealed">Copy</button>
                     <label style="display:block;margin-top:12px;"><input type="checkbox" v-model="revealAck" /> I've saved this value</label>

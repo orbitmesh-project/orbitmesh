@@ -6,10 +6,8 @@ using Cronos;
 using OrbitMesh;
 using OrbitMesh.Deployment;
 using OrbitMesh.Server.Configuration;
-using OrbitMesh.Server.Hubs;
 using OrbitMesh.Server.Services;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Options;
 using NuGet.Versioning;
 
@@ -32,7 +30,6 @@ public sealed class ManagementController(
     IOrbitMeshConfigWriter configWriter,
     IOrbitMeshDirectory directory,
     IPendingEdgeRegistry pendingEdgeRegistry,
-    IHubContext<EdgeHub> edgeHub,
     IPackageRegistry packageRegistry,
     UpdateStatus updateStatus,
     UpdateCheckService updateChecker,
@@ -236,7 +233,7 @@ public sealed class ManagementController(
     // CredentialsManage, not EdgesWrite: this mints a new credential too.
     [HttpPost("edges/pending/{instanceId}/approve")]
     [RequiresScope(OrbitMeshScope.CredentialsManage)]
-    public async Task<ActionResult<object>> ApprovePendingEdge(string instanceId, [FromBody] ApprovePendingEdgeRequest request)
+    public ActionResult<object> ApprovePendingEdge(string instanceId, [FromBody] ApprovePendingEdgeRequest request)
     {
         var pending = pendingEdgeRegistry.Get(instanceId);
         if (pending == null)
@@ -266,19 +263,11 @@ public sealed class ManagementController(
             });
             cfg.Edges.Add(new EdgeOptions { Name = request.Name, Credential = request.Name, InstanceId = instanceId });
         });
-        pendingEdgeRegistry.Remove(instanceId);
-
-        var pushed = false;
-        try
-        {
-            await edgeHub.Clients.Client(pending.ConnectionId).SendAsync(EdgeClientMethodNames.EdgeApproved, accessKey);
-            pushed = true;
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning(ex, "Unable to push the new credential to Edge '{Name}' (connectionId='{ConnectionId}') - it will need the AccessKey applied by hand.", request.Name.ForLog(), pending.ConnectionId);
-        }
-        return Ok(new { name = request.Name, accessKey, pushed });
+        // Kept (not removed) with the new key attached - the Edge picks it up on its next
+        // rest/enroll status poll (every 5s) rather than needing a live SignalR connection to push
+        // down. See PendingEdgeRegistry's remarks for when this gets purged.
+        pendingEdgeRegistry.MarkApproved(instanceId, accessKey);
+        return Ok(new { name = request.Name, accessKey });
     }
 
     [HttpDelete("edges/pending/{instanceId}")]

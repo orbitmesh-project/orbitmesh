@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Net;
 using System.Net.Http;
+using System.Net.Http.Json;
 using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -37,6 +38,7 @@ public sealed class EdgeManager(IOptions<EdgeOptions> optionsAccessor, ILogger<E
     private HubConnection? _connection;
     private EdgeDescription _description = null!;
     private string _edgeName = string.Empty;
+    private string _instanceId = string.Empty;
     private CancellationTokenSource? _cts;
     private int _restartRequested;
     // Windows-only (see JobObject's own doc comment for why this is the real fix for orphaned package
@@ -47,7 +49,7 @@ public sealed class EdgeManager(IOptions<EdgeOptions> optionsAccessor, ILogger<E
     {
         _edgeName = string.IsNullOrEmpty(_options.EdgeName) ? Environment.MachineName : _options.EdgeName;
         _cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        var instanceId = InstanceIdProvider.GetOrCreate(_workingDirectory);
+        _instanceId = InstanceIdProvider.GetOrCreate(_workingDirectory);
 
         Directory.CreateDirectory(_options.LocalPackagesDirectory);
 
@@ -87,7 +89,7 @@ public sealed class EdgeManager(IOptions<EdgeOptions> optionsAccessor, ILogger<E
             IPAddresses = addresses,
             Version = typeof(EdgeManager).Assembly.GetName().Version?.ToString() ?? "1.0.0",
             Runtime = nameof(PackageRuntime.DotNet),
-            InstanceId = instanceId
+            InstanceId = _instanceId
         };
 
         _connection = new HubConnectionBuilder()
@@ -96,7 +98,7 @@ public sealed class EdgeManager(IOptions<EdgeOptions> optionsAccessor, ILogger<E
                 o.Headers.Add(OrbitMeshHeaderNames.EdgeName, _edgeName);
                 o.Headers.Add(OrbitMeshHeaderNames.PackageName, OrbitMeshDefaultNames.EdgePackageName);
                 o.Headers.Add(OrbitMeshHeaderNames.AccessKey, _options.OrbitMeshAccessKey);
-                o.Headers.Add(OrbitMeshHeaderNames.InstanceId, instanceId);
+                o.Headers.Add(OrbitMeshHeaderNames.InstanceId, _instanceId);
             })
             .WithOrbitMeshDefaults()
             .Build();
@@ -105,7 +107,6 @@ public sealed class EdgeManager(IOptions<EdgeOptions> optionsAccessor, ILogger<E
         _connection.On<PackageControlActionMessage>(EdgeClientMethodNames.PackageControlAction, m => OnControlAction(m.Action, m.PackageName));
         _connection.On(EdgeServerMethodNames.RestartEdge, () => _ = RestartSelfAsync());
         _connection.On(EdgeServerMethodNames.CheckForUpdate, () => _ = CheckForUpdateNowAsync());
-        _connection.On<string>(EdgeClientMethodNames.EdgeApproved, OnApproved);
         _connection.Reconnected += _ => RegisterAsync();
         _connection.Reconnecting += ex =>
         {
@@ -113,12 +114,78 @@ public sealed class EdgeManager(IOptions<EdgeOptions> optionsAccessor, ILogger<E
             return Task.CompletedTask;
         };
 
-        await _connection.StartAsync(cancellationToken);
-        await RegisterAsync();
+        try
+        {
+            await _connection.StartAsync(cancellationToken);
+            await RegisterAsync();
+        }
+        catch (Exception ex)
+        {
+            // Not yet approved (or the server/network is briefly unreachable) - the Edge would
+            // otherwise never come back on its own, since a rejected SignalR connection isn't retried
+            // by WithOrbitMeshDefaults()'s policy (that only governs reconnects of a connection that
+            // was actually established once). Fall back to polling rest/enroll instead, forever - it
+            // needs nothing this same failure wouldn't also need, so there's no separate "give up"
+            // case to handle.
+            logger.LogWarning(ex, "Unable to connect to the OrbitMesh server - falling back to REST enrollment (not yet approved, or the server is unreachable).");
+            _ = EnrollAndPollAsync(_cts.Token);
+        }
 
         NamedPipeHelper.StartServer(NamedPipeHelper.GetCurrentProcessPipeName(), OnNamedPipeMessage, ex => logger.LogError(ex, "Named pipe server error"), _cts.Token);
 
         _ = ReportUsageLoopAsync(_cts.Token);
+    }
+
+    private async Task EnrollAndPollAsync(CancellationToken cancellationToken)
+    {
+        var client = httpClientFactory.CreateClient(nameof(EdgeManager));
+        var baseUri = _options.OrbitMeshServerUri.TrimEnd('/');
+        var request = new EnrollRequest(_description.EdgeName, _description.InstanceId, _description.MachineName, _description.OSVersion, _description.OSCaption, _description.Platform);
+        var enrolled = false;
+        string? lastLoggedStatus = null;
+
+        while (!cancellationToken.IsCancellationRequested)
+        {
+            try
+            {
+                EnrollStatusResponse? response;
+                if (enrolled)
+                {
+                    response = await client.GetFromJsonAsync<EnrollStatusResponse>($"{baseUri}/rest/enroll/{_instanceId}/status", cancellationToken);
+                }
+                else
+                {
+                    using var postResponse = await client.PostAsJsonAsync($"{baseUri}/rest/enroll", request, cancellationToken);
+                    response = await postResponse.Content.ReadFromJsonAsync<EnrollStatusResponse>(cancellationToken);
+                    enrolled = true;
+                }
+
+                if (response?.Status != lastLoggedStatus)
+                {
+                    logger.LogInformation("Enrollment status: {Status}", response?.Status ?? "?");
+                    lastLoggedStatus = response?.Status;
+                }
+
+                if (response is { Status: EnrollmentStatus.Approved, AccessKey: { Length: > 0 } accessKey })
+                {
+                    await HandleApprovedAccessKeyAsync(accessKey);
+                    return;
+                }
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                logger.LogDebug(ex, "Enrollment poll failed - will retry");
+            }
+
+            try
+            {
+                await Task.Delay(TimeSpan.FromSeconds(5), cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                return;
+            }
+        }
     }
 
     public async Task StopAsync()
@@ -160,8 +227,9 @@ public sealed class EdgeManager(IOptions<EdgeOptions> optionsAccessor, ILogger<E
         }
     }
 
-    // Fired when an admin approves this Edge from the Console's pending-edges list.
-    private void OnApproved(string accessKey)
+    // Fired once rest/enroll polling (EnrollAndPollAsync) sees an admin approve this Edge from the
+    // Console's pending-edges list.
+    private async Task HandleApprovedAccessKeyAsync(string accessKey)
     {
         try
         {
@@ -174,7 +242,7 @@ public sealed class EdgeManager(IOptions<EdgeOptions> optionsAccessor, ILogger<E
         }
         logger.LogInformation("Approved by the server - restarting to connect with the new AccessKey.");
         // _options only reflects appsettings.json at startup - restart to pick up the change just written.
-        _ = RestartSelfAsync();
+        await RestartSelfAsync();
     }
 
     private void ApplyApprovedAccessKey(string accessKey)

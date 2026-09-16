@@ -4,6 +4,20 @@ Format: [Keep a Changelog](https://keepachangelog.com/). Versions match `<Versio
 `OrbitMesh.Common.csproj`, which is what gets published to
 [nuget.org](https://www.nuget.org/packages/OrbitMesh.Common).
 
+## [1.2.4]
+
+### Added
+
+- `EnrollRequest`/`EnrollStatusResponse`/`EnrollmentStatus` - shared DTOs for the Edge's new REST
+  enrollment flow (`rest/enroll` on OrbitMesh.Server, used by OrbitMesh.Edge when it can't connect
+  over SignalR with a valid AccessKey yet). See OrbitMesh.Server's and OrbitMesh.Edge's own
+  changelogs for the full story.
+
+### Removed
+
+- `EdgeClientMethodNames.EdgeApproved` - the SignalR push it named is gone now that an Edge picks up
+  its approved AccessKey by polling `rest/enroll` instead (see above); nothing sends it anymore.
+
 ## [1.2.3]
 
 ### Fixed
