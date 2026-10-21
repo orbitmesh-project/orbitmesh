@@ -8,6 +8,10 @@ namespace OrbitMesh.Server.Services;
 /// credential name - a failed attempt's presented key doesn't reliably identify which credential is
 /// being guessed at, but the source of repeated failures is always known. Purely in-memory: a restart
 /// clears it, which is an acceptable trade for not persisting attacker IPs into appsettings.json.
+/// A successful request deliberately does NOT reset an IP's failure count: an attacker holding any one
+/// valid key (a read-only demo account, say) could otherwise interleave a success every few guesses and
+/// never be locked out. Failures simply age out with the window. Shared by the REST middleware and the
+/// SignalR hubs (see HubAttemptGuard).
 /// </summary>
 public sealed class LoginAttemptLimiter
 {
@@ -69,14 +73,6 @@ public sealed class LoginAttemptLimiter
                 return true;
             }
             return false;
-        }
-    }
-
-    public void RecordSuccess(IPAddress? ip)
-    {
-        if (ip != null)
-        {
-            attempts.TryRemove(ip, out _);
         }
     }
 

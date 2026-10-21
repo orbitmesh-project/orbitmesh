@@ -46,7 +46,7 @@ public sealed class EdgeUpdateCheckService(
                 return;
             }
             logger.LogInformation("Applying OrbitMesh.Edge update {Version} (currently {Current})...", release.Version, EdgeVersion.Current);
-            await edgeSelfUpdater.ApplyAsync(release.ZipUrl, cancellationToken);
+            await edgeSelfUpdater.ApplyAsync(release.ZipUrl, release.Version ?? string.Empty, EdgeVersion.Current, cancellationToken);
         }
         catch (Exception ex)
         {

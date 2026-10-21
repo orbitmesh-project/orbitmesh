@@ -13,13 +13,16 @@ public static class ReleaseZipDownloader
     /// <summary>Downloads <paramref name="zipUrl"/> to a uniquely-named temp file and returns its
     /// path. <paramref name="clientName"/> selects the named <see cref="HttpClient"/> to use (see
     /// <see cref="IHttpClientFactory"/>); <paramref name="bearerToken"/> is sent as a Bearer
-    /// Authorization header if given.</summary>
-    public static async Task<string> DownloadToTempFileAsync(IHttpClientFactory httpClientFactory, string clientName, string zipUrl, string? bearerToken, CancellationToken cancellationToken)
+    /// Authorization header if given - but only when <paramref name="zipUrl"/> is on the same host and
+    /// port as the configured <paramref name="updateServerUrl"/>. The zip_url comes from the update
+    /// server's response, so sending the token wherever it points would hand the credential to any
+    /// third party a (compromised) response names.</summary>
+    public static async Task<string> DownloadToTempFileAsync(IHttpClientFactory httpClientFactory, string clientName, string zipUrl, string? bearerToken, string? updateServerUrl, CancellationToken cancellationToken)
     {
         var zipPath = Path.Combine(Path.GetTempPath(), $"orbitmesh-update-{Guid.NewGuid():N}.zip");
         var client = httpClientFactory.CreateClient(clientName);
         using var request = new HttpRequestMessage(HttpMethod.Get, zipUrl);
-        if (!string.IsNullOrEmpty(bearerToken))
+        if (!string.IsNullOrEmpty(bearerToken) && IsSameServer(zipUrl, updateServerUrl))
         {
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", bearerToken);
         }
@@ -30,4 +33,11 @@ public static class ReleaseZipDownloader
         await stream.CopyToAsync(file, cancellationToken);
         return zipPath;
     }
+
+    private static bool IsSameServer(string zipUrl, string? updateServerUrl) =>
+        Uri.TryCreate(zipUrl, UriKind.Absolute, out var zip)
+        && Uri.TryCreate(updateServerUrl, UriKind.Absolute, out var server)
+        && string.Equals(zip.Scheme, server.Scheme, StringComparison.OrdinalIgnoreCase)
+        && string.Equals(zip.Host, server.Host, StringComparison.OrdinalIgnoreCase)
+        && zip.Port == server.Port;
 }

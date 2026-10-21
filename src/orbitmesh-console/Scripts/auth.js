@@ -14,7 +14,11 @@ function setCookie(name, value, expirationSeconds) {
         date.setTime(date.getTime() + expirationSeconds * 1000);
         expires = date.toUTCString();
     }
-    document.cookie = `${name}=${encodeURIComponent(value)}; expires=${expires}; path=/`;
+    // SameSite=Strict: the cookie is only ever read by this page's own JS and re-sent by it, never needed
+    // on a cross-site navigation. Secure whenever the page itself is served over HTTPS (it can't be set
+    // on plain HTTP - the browser would silently drop the cookie and break login there).
+    const secure = window.location.protocol === "https:" ? "; Secure" : "";
+    document.cookie = `${name}=${encodeURIComponent(value)}; expires=${expires}; path=/; SameSite=Strict${secure}`;
 }
 
 function getParameterByName(name) {

@@ -101,7 +101,6 @@ public sealed class AccessKeyAuthenticationMiddleware(RequestDelegate next, ILog
         if (directory.CheckAccess(edgeName, packageName, accessKey, accessType))
         {
             metrics.AccessGranted();
-            attemptLimiter.RecordSuccess(remoteIp);
             var credentialName = directory.GetCredentialName(accessKey);
             usageTracker.RecordUse(credentialName);
             if (accessType == OrbitMeshAccessType.Management && MutatingMethods.Contains(context.Request.Method))

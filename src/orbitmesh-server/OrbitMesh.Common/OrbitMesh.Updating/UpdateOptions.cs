@@ -20,11 +20,18 @@ public sealed class UpdateOptions
     public int CheckIntervalMinutes { get; set; } = 60;
 
     /// <summary>Public keys (PEM contents, or paths relative to the app's own directory) trusted
-    /// to sign releases. Empty - the default - means signatures aren't checked at all, same as
-    /// ci4-updater's own default: updates are trusted on the strength of the connection to the
-    /// update server. As soon as one key is listed, every release must carry a manifest.json and a
-    /// valid manifest.json.sig signed by one of these keys, or it's refused outright.</summary>
+    /// to sign releases. Every release must carry a manifest.json and a valid manifest.json.sig signed
+    /// by one of these keys, naming the version being applied, or it's refused outright. Empty
+    /// means no release can be verified, so updates are refused too unless
+    /// <see cref="AllowUnsignedReleases"/> is set.</summary>
     public List<string> PublicKeys { get; set; } = new();
+
+    /// <summary>Explicit opt-out for an install with no <see cref="PublicKeys"/>: apply releases on the
+    /// strength of the connection to the update server alone, with no signature or file-hash check.
+    /// Off by default - an update is code that runs with the app's own privileges, so a compromised
+    /// or impersonated update server (or a plain-HTTP <see cref="ServerUrl"/>) would otherwise be code
+    /// execution on every install.</summary>
+    public bool AllowUnsignedReleases { get; set; }
 
     /// <summary>Windows Service name, or systemd unit name, this instance runs as - required only
     /// when it actually runs hosted that way (OrbitMesh.Updater needs it to know how to restart the

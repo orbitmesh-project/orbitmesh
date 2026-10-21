@@ -108,7 +108,7 @@ public sealed class OrbitMeshDirectory(IOptionsMonitor<OrbitMeshOptions> options
         {
             try
             {
-                return cipher.Decrypt(credential.AccessKey) == presentedAccessKey;
+                return FixedTimeEquals(cipher.Decrypt(credential.AccessKey), presentedAccessKey);
             }
             // A decrypt failure (malformed or wrong key) just means "not a match", not a crash.
             catch (Exception ex) when (ex is FormatException or System.Security.Cryptography.CryptographicException)
@@ -116,8 +116,14 @@ public sealed class OrbitMeshDirectory(IOptionsMonitor<OrbitMeshOptions> options
                 return false;
             }
         }
-        return credential.AccessKey == presentedAccessKey;
+        return FixedTimeEquals(credential.AccessKey, presentedAccessKey);
     }
+
+    // Constant-time for equal-length inputs, so a Machine key can't be recovered byte by byte from
+    // response timing (impractical against a 256-bit random key, but free to rule out).
+    private static bool FixedTimeEquals(string a, string b) =>
+        System.Security.Cryptography.CryptographicOperations.FixedTimeEquals(
+            System.Text.Encoding.UTF8.GetBytes(a), System.Text.Encoding.UTF8.GetBytes(b));
 
     private static bool CanAccess(CredentialOptions credential, OrbitMeshAccessType accessType)
     {
@@ -262,7 +268,7 @@ public sealed class OrbitMeshDirectory(IOptionsMonitor<OrbitMeshOptions> options
     public string? GetCredentialName(string? accessKey) => FindCredential(accessKey)?.Name;
 
     public CredentialOptions? FindCredential(string? accessKey) =>
-        string.IsNullOrEmpty(accessKey) ? null : Current.Credentials.FirstOrDefault(c => MatchesAccessKey(c, accessKey));
+        string.IsNullOrEmpty(accessKey) ? null : Current.Credentials.FirstOrDefault(c => c.Enable && MatchesAccessKey(c, accessKey));
 
     public List<string> GetPackageNames() =>
         Current.Edges.SelectMany(s => s.Packages.Select(p => p.Name)).Distinct().ToList();

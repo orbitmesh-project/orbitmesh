@@ -4,6 +4,23 @@ Format: [Keep a Changelog](https://keepachangelog.com/). Versions match `<Versio
 `OrbitMesh.Edge.csproj`, which is what's reported to the update server (see
 `Services/EdgeSelfUpdater.cs` and `Services/EdgeUpdateCheckService.cs`).
 
+## [1.1.8]
+
+### Security
+
+- Updates are verified like the Server's: an install without `UpdateOptions.PublicKeys` refuses a
+  release unless `UpdateOptions.AllowUnsignedReleases` is set, and a signed release must be the announced,
+  newer version (see OrbitMesh.Common 1.2.6). The update token is only sent to the update server's host.
+- `Edge:RequireHttps` (default `false`) refuses to start with a plain-HTTP `OrbitMeshServerUri` to a
+  non-loopback host; without it the Edge logs a warning at startup instead, so an existing LAN install
+  isn't broken by an update.
+
+### Changed
+
+- Reconnection attempts made while enrolling are throttled to once a minute (was 30s): the Server now counts
+  every failed SignalR connect toward its per-IP lockout (10 per 5 minutes), which an Edge stuck on a bad
+  key must stay well under.
+
 ## [1.1.7]
 
 ### Fixed

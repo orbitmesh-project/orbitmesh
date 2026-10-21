@@ -24,7 +24,7 @@ public sealed class StaticSiteUpdater(
         return File.Exists(path) ? File.ReadAllText(path).Trim() : null;
     }
 
-    public async Task ApplyAsync(FileServerOptions site, string version, string zipUrl, CancellationToken cancellationToken = default)
+    public async Task ApplyAsync(FileServerOptions site, string version, string zipUrl, string? currentVersion, CancellationToken cancellationToken = default)
     {
         var liveDir = Path.GetFullPath(site.PhysicalPath).TrimEnd(Path.DirectorySeparatorChar);
         var parent = Path.GetDirectoryName(liveDir)
@@ -42,7 +42,7 @@ public sealed class StaticSiteUpdater(
         Directory.CreateDirectory(stagingDir);
 
         var updateOptions = options.CurrentValue.UpdateOptions;
-        var zipPath = await ReleaseZipDownloader.DownloadToTempFileAsync(httpClientFactory, nameof(StaticSiteUpdater), zipUrl, updateOptions.Token, cancellationToken);
+        var zipPath = await ReleaseZipDownloader.DownloadToTempFileAsync(httpClientFactory, nameof(StaticSiteUpdater), zipUrl, updateOptions.Token, updateOptions.ServerUrl, cancellationToken);
         try
         {
             ZipFile.ExtractToDirectory(zipPath, stagingDir);
@@ -50,7 +50,7 @@ public sealed class StaticSiteUpdater(
             // Before PreserveFiles/the version marker below add files of their own - those belong to
             // this install, not the release, and would otherwise show up as "unexpected files" against
             // a manifest that only ever describes the release payload itself.
-            verifier.VerifyIfRequired(stagingDir, updateOptions.PublicKeys);
+            verifier.Verify(stagingDir, updateOptions, version, currentVersion);
 
             // Per-install files a release build can't know in advance - e.g. a device-specific
             // config.json holding that site's own server URL/access key. Carried forward from the live

@@ -20,7 +20,7 @@ public sealed class ServerSelfUpdater(
     ReleaseVerifier verifier,
     ILogger<ServerSelfUpdater> logger)
 {
-    public async Task ApplyAsync(string zipUrl, CancellationToken cancellationToken = default)
+    public async Task ApplyAsync(string zipUrl, string expectedVersion, string? currentVersion, CancellationToken cancellationToken = default)
     {
         var liveDir = AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar);
         var parent = Path.GetDirectoryName(liveDir)
@@ -37,7 +37,7 @@ public sealed class ServerSelfUpdater(
         Directory.CreateDirectory(stagingDir);
 
         var updateOptions = options.CurrentValue.UpdateOptions;
-        var zipPath = await ReleaseZipDownloader.DownloadToTempFileAsync(httpClientFactory, nameof(ServerSelfUpdater), zipUrl, updateOptions.Token, cancellationToken);
+        var zipPath = await ReleaseZipDownloader.DownloadToTempFileAsync(httpClientFactory, nameof(ServerSelfUpdater), zipUrl, updateOptions.Token, updateOptions.ServerUrl, cancellationToken);
         try
         {
             ZipFile.ExtractToDirectory(zipPath, stagingDir);
@@ -50,7 +50,7 @@ public sealed class ServerSelfUpdater(
             // Before PreserveLiveState adds appsettings.json/packages/etc. below - those belong to
             // this install, not the release, and would otherwise show up as "unexpected files" against
             // a manifest that only ever describes the release payload itself.
-            verifier.VerifyIfRequired(stagingDir, updateOptions.PublicKeys);
+            verifier.Verify(stagingDir, updateOptions, expectedVersion, currentVersion);
 
             PreserveLiveState(liveDir, stagingDir);
         }

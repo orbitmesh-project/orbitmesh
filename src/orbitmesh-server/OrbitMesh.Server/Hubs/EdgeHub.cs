@@ -14,6 +14,7 @@ public sealed class EdgeHub(
     OrbitMeshLogService packageLog,
     IHubContext<ControlHub> controlHub,
     CredentialUsageTracker usageTracker,
+    LoginAttemptLimiter attemptLimiter,
     ILogger<EdgeHub> logger) : Hub
 {
     // CheckAccess alone doesn't require any scope for this access type (see IOrbitMeshDirectory.CanAccess) -
@@ -25,6 +26,12 @@ public sealed class EdgeHub(
     public override async Task OnConnectedAsync()
     {
         Context.CaptureConnectionMetadata();
+        if (Context.IsLockedOut(attemptLimiter))
+        {
+            metrics.AccessDenied();
+            Context.Abort();
+            return;
+        }
         if (IsAuthorized())
         {
             // Picked up its approved key and reconnected for real - drop the plaintext key still held
@@ -49,6 +56,7 @@ public sealed class EdgeHub(
         }
 
         metrics.AccessDenied();
+        Context.RecordFailure(attemptLimiter, logger);
         // Not (yet) authorized - reject outright rather than keeping the connection open. An
         // unapproved/misconfigured Edge now falls back to REST enrollment (EnrollmentController)
         // instead of waiting on this connection for an approval push.

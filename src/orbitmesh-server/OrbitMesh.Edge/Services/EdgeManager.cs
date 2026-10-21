@@ -50,6 +50,7 @@ public sealed class EdgeManager(IOptions<EdgeOptions> optionsAccessor, ILogger<E
         _edgeName = string.IsNullOrEmpty(_options.EdgeName) ? Environment.MachineName : _options.EdgeName;
         _cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         _instanceId = InstanceIdProvider.GetOrCreate(_workingDirectory);
+        CheckTransportSecurity();
 
         Directory.CreateDirectory(_options.LocalPackagesDirectory);
 
@@ -128,6 +129,25 @@ public sealed class EdgeManager(IOptions<EdgeOptions> optionsAccessor, ILogger<E
         NamedPipeHelper.StartServer(NamedPipeHelper.GetCurrentProcessPipeName(), OnNamedPipeMessage, ex => logger.LogError(ex, "Named pipe server error"), _cts.Token);
 
         _ = ReportUsageLoopAsync(_cts.Token);
+    }
+
+    // The AccessKey (and, during enrollment, the freshly-approved one) travels in request headers, so
+    // plain HTTP to anything but this machine hands it to whoever is on the path. Warns by default - a
+    // LAN install over http:// is a legitimate (if weaker) setup that an update must not silently break -
+    // and refuses to start when Edge:RequireHttps is set.
+    private void CheckTransportSecurity()
+    {
+        if (!Uri.TryCreate(_options.OrbitMeshServerUri, UriKind.Absolute, out var uri)
+            || !uri.Scheme.Equals(Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase)
+            || uri.IsLoopback)
+        {
+            return;
+        }
+        if (_options.RequireHttps)
+        {
+            throw new InvalidOperationException($"Edge:RequireHttps is set but Edge:OrbitMeshServerUri is plain HTTP to a non-local host ({uri.Host}). Use an https:// URL.");
+        }
+        logger.LogWarning("Edge:OrbitMeshServerUri uses plain HTTP to {Host}: the AccessKey is sent unencrypted. Serve the Server over HTTPS (or behind a TLS reverse proxy) and set Edge:RequireHttps to enforce it.", uri.Host);
     }
 
     // True once connected AND registered. On failure the connection is stopped so it can't sit in
@@ -224,9 +244,10 @@ public sealed class EdgeManager(IOptions<EdgeOptions> optionsAccessor, ILogger<E
                 // "Rejected" = the Server already has an Edge configured for this InstanceId, and an
                 // already-applied approval means the same: the original connect failure was likely
                 // transient (e.g. the server was down at boot) rather than a missing approval - try the
-                // normal connection again (throttled, in case the AccessKey or name on disk really is
-                // wrong and every attempt will just be aborted).
-                if ((response?.Status == EnrollmentStatus.Rejected || alreadyApplied) && DateTime.UtcNow - lastConnectAttemptUtc > TimeSpan.FromSeconds(30))
+                // normal connection again. Throttled to once a minute: if the AccessKey or name on disk
+                // really is wrong every attempt is aborted, and the Server counts each one toward its
+                // failed-attempt lockout (10 per 5 minutes per IP), which this must stay well under.
+                if ((response?.Status == EnrollmentStatus.Rejected || alreadyApplied) && DateTime.UtcNow - lastConnectAttemptUtc > TimeSpan.FromSeconds(60))
                 {
                     lastConnectAttemptUtc = DateTime.UtcNow;
                     if (await TryConnectAsync(cancellationToken))

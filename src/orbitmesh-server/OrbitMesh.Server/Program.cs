@@ -7,6 +7,7 @@ using OrbitMesh.Server.Middleware;
 using OrbitMesh.Server.Providers;
 using OrbitMesh.Server.Services;
 using OrbitMesh.Updating;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Options;
 using NLog.Extensions.Logging;
@@ -109,7 +110,61 @@ if (listenUrls is { Length: > 0 })
     builder.WebHost.UseUrls(listenUrls);
 }
 
+// Trust X-Forwarded-For/-Proto only from the proxies listed in OrbitMesh:TrustedProxies - nothing is
+// trusted by default (the framework's own default would trust loopback). See OrbitMeshOptions.TrustedProxies.
+var trustedProxies = builder.Configuration.GetSection($"{OrbitMeshOptions.SectionName}:TrustedProxies").Get<string[]>() ?? [];
+if (trustedProxies.Length > 0)
+{
+    builder.Services.Configure<ForwardedHeadersOptions>(o =>
+    {
+        o.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+        o.KnownIPNetworks.Clear();
+        o.KnownProxies.Clear();
+        foreach (var proxy in trustedProxies)
+        {
+            if (System.Net.IPAddress.TryParse(proxy, out var address))
+            {
+                o.KnownProxies.Add(address);
+            }
+        }
+    });
+}
+
 var app = builder.Build();
+
+if (trustedProxies.Length > 0)
+{
+    app.UseForwardedHeaders();
+}
+
+// Baseline hardening for every response. The CSP is deliberately limited to the directives that never
+// need per-page tuning (no script-src/style-src: the Console's Vue build compiles templates at runtime
+// and several pages rely on inline styles). HSTS is only emitted on HTTPS requests - a browser ignores
+// it over plain HTTP anyway - and without includeSubDomains/preload, which are a decision for the domain
+// owner, not for a server that may sit on a LAN name.
+app.Use(async (context, next) =>
+{
+    context.Response.OnStarting(() =>
+    {
+        var headers = context.Response.Headers;
+        headers["X-Content-Type-Options"] = "nosniff";
+        headers["X-Frame-Options"] = "SAMEORIGIN";
+        headers["Referrer-Policy"] = "no-referrer";
+        headers["Content-Security-Policy"] = "frame-ancestors 'self'; base-uri 'self'; object-src 'none'; form-action 'self'";
+        if (context.Request.IsHttps)
+        {
+            headers["Strict-Transport-Security"] = "max-age=31536000";
+        }
+        // API and enrollment responses carry credentials or per-user state - never cache them. Static files
+        // keep the "no-cache" revalidation set where they're served.
+        if (context.Request.Path.StartsWithSegments("/rest", StringComparison.OrdinalIgnoreCase) && !headers.ContainsKey("Cache-Control"))
+        {
+            headers["Cache-Control"] = "no-store";
+        }
+        return Task.CompletedTask;
+    });
+    await next(context);
+});
 
 if (app.Environment.IsDevelopment())
 {

@@ -4,6 +4,50 @@ Format: [Keep a Changelog](https://keepachangelog.com/). Versions match `<Versio
 `OrbitMesh.Server.csproj`, which is what's reported to the update server (see
 `Services/ServerSelfUpdater.cs` and `Services/UpdateCheckService.cs`).
 
+## [1.2.21]
+
+Security review follow-up, part 2 (the design decisions).
+
+### Security
+
+- **Scope delegation.** `credentials:manage` and `configuration:write` no longer amount to root: a caller
+  can only create or change a credential whose scopes it holds itself, can't edit or remove a credential
+  carrying scopes it doesn't hold (so a lesser admin can't take over, or delete, a more privileged one),
+  and can't approve an Edge without `edge:connect`. The raw configuration editor applies the same rule,
+  refuses plaintext AccessKeys, and refuses FileServers paths that are empty/`/`, don't start with `/`
+  (which made every request throw, locking out the admin who saved it), or shadow `/rest`, `/signalr`,
+  `/metrics`, `/openapi` or `/packages` - file servers are served without authentication.
+- The last remaining credential can no longer be removed (it would reopen first-run setup).
+- **Secrets masked on read.** `configuration:read` returns `********` for credential AccessKeys
+  (PBKDF2 hashes / encrypted blobs), the update token, NuGet feed API keys, secret variables and
+  Password-typed package settings; so do `packages:read`'s package and settings endpoints. Saving the
+  placeholder back keeps the stored value (a new item can't be saved with a placeholder).
+- **Failed-attempt lockout now covers the SignalR hubs** (it only covered REST): `EdgeHub`, `OrbitMeshHub`,
+  `ControlHub` and `ConsumerHub` count failed connects against the same per-IP limiter and refuse a locked-out
+  IP. A successful request no longer resets an IP's failure count.
+- Machine AccessKeys are compared in constant time, and `FindCredential` only resolves enabled credentials.
+- **Self-updates are verified.** A release is refused when `UpdateOptions.PublicKeys` is empty (unless
+  `AllowUnsignedReleases` is set), when its signed manifest version isn't the announced one, or when it
+  isn't newer than the running version; the update token is only sent to the update server's own host.
+  `ServerSelfUpdater`, `StaticSiteUpdater` and `ManagementController` pass the versions through.
+- **Response hardening** on every response: `X-Content-Type-Options: nosniff`, `X-Frame-Options:
+  SAMEORIGIN` + CSP `frame-ancestors 'self'` (and `base-uri`/`object-src`/`form-action`),
+  `Referrer-Policy: no-referrer`, `Cache-Control: no-store` on `/rest`, and
+  `Strict-Transport-Security` over HTTPS. The Console and Kiosk can no longer be framed by another site.
+
+### Added
+
+- `OrbitMesh:TrustedProxies` - IP addresses of reverse proxies whose `X-Forwarded-For`/`-Proto` are
+  trusted (none by default). Without it, behind a proxy every client shares the proxy's address.
+- HTTPS: `listenUrls` may contain `https://` entries given a certificate in the standard Kestrel section.
+- Docs: a "Securing the Server" section and a corrected Edge-enrollment description (the approval is no
+  longer "pushed"); `SECURITY.md` updated.
+
+### Changed
+
+- Dependencies are unchanged from 1.2.20. First-run setup is intentionally unchanged (no bootstrap
+  token); the new docs call out creating the admin account right after the first start.
+
 ## [1.2.20]
 
 Security review follow-up.

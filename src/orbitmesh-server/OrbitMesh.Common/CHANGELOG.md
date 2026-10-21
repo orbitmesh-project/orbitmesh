@@ -4,6 +4,24 @@ Format: [Keep a Changelog](https://keepachangelog.com/). Versions match `<Versio
 `OrbitMesh.Common.csproj`, which is what gets published to
 [nuget.org](https://www.nuget.org/packages/OrbitMesh.Common).
 
+## [1.2.6]
+
+### Security
+
+- `ReleaseVerifier` (shared by the Server's and the Edge's self-update and the static-site updater) no
+  longer treats an empty `UpdateOptions.PublicKeys` as "trust the connection": such an install now
+  refuses to apply a release unless the new `UpdateOptions.AllowUnsignedReleases` is set. With keys
+  configured it also requires the signed manifest's `version` to equal the announced version and to be
+  newer than the running one, so a replayed older (validly signed) release is rejected. The method is
+  now `Verify(stagedDir, updateOptions, expectedVersion, currentVersion)` (was
+  `VerifyIfRequired(stagedDir, publicKeys)`).
+- `ReleaseZipDownloader.DownloadToTempFileAsync` takes the update server URL and only sends the bearer
+  token when the `zip_url` it was given is on that same scheme, host and port.
+
+### Added
+
+- `UpdateOptions.AllowUnsignedReleases` (default `false`).
+
 ## [1.2.5]
 
 ### Added

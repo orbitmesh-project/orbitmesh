@@ -14,6 +14,7 @@ public sealed class ControlHub(
     IHubContext<OrbitMeshHub> orbitmeshHub,
     OrbitMeshLogService packageLog,
     CredentialUsageTracker usageTracker,
+    LoginAttemptLimiter attemptLimiter,
     ILogger<ControlHub> logger) : Hub
 {
     public const string LogsGroup = "ControlLogs";
@@ -24,8 +25,14 @@ public sealed class ControlHub(
     public override Task OnConnectedAsync()
     {
         Context.CaptureConnectionMetadata();
+        if (Context.IsLockedOut(attemptLimiter))
+        {
+            Context.Abort();
+            return Task.CompletedTask;
+        }
         if (!directory.CheckAccess(Context.GetEdgeName(), Context.GetPackageName(), Context.GetAccessKey(), OrbitMeshAccessType.Controller))
         {
+            Context.RecordFailure(attemptLimiter, logger);
             logger.LogWarning(
                 "ControlHub connection rejected (EdgeName={EdgeName}). The credential must have at least one scope.",
                 Context.GetEdgeName());

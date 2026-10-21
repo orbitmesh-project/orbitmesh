@@ -3,6 +3,18 @@
 Format: [Keep a Changelog](https://keepachangelog.com/). Versions match the `VERSION` file at
 the root of this project, bumped by `cicd/release-static-site.ps1`.
 
+## [1.2.17]
+
+### Security
+
+- The session cookies are now `SameSite=Strict`, and `Secure` when the Console is served over HTTPS.
+
+### Changed
+
+- Secrets the Server masks (`********`: credential keys, tokens, API keys, secret variables, Password
+  settings) round-trip through the raw configuration editor and the package settings editor: leaving the
+  placeholder in place keeps the stored value.
+
 ## [1.2.16]
 
 ### Security

@@ -12,7 +12,16 @@ public sealed class OrbitMeshOptions
 
     public string PackagesRootDirectory { get; set; } = "packages";
 
+    // "https://+:8443" works as an entry too, given a certificate in the standard Kestrel section (e.g.
+    // Kestrel:Certificates:Default:Path / :Password) - nothing OrbitMesh-specific to configure beyond that.
     public List<string> ListenUrls { get; set; } = new() { "http://+:8088" };
+
+    // IP addresses of reverse proxies in front of this server whose X-Forwarded-For / X-Forwarded-Proto
+    // headers are trusted. Empty (the default) trusts none, so RemoteIpAddress is always the direct peer.
+    // Behind a proxy that is NOT listed here, every client appears to come from the proxy's address:
+    // the failed-login lockout then becomes global (ten bad attempts from anywhere lock everyone out) and
+    // a FileServers entry marked LocalhostOnly is exposed to every client of a same-host proxy.
+    public List<string> TrustedProxies { get; set; } = new();
 
     // A list rather than a single entry so more than one static site (e.g. the admin console at
     // /WebConsole and a separate Consumer dashboard at /dashboard) can be served side by side by this

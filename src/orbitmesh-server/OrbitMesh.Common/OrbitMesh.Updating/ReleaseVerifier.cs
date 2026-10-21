@@ -10,10 +10,11 @@ namespace OrbitMesh.Updating;
 /// the manifest's exact bytes; the manifest itself carries a SHA-256 hash of every file in the
 /// release, so a valid signature covers the whole payload transitively.
 ///
-/// A no-op when no public keys are configured (UpdateOptions.PublicKeys) - same "trust the connection
-/// entirely" default ci4-updater itself ships with. As soon as one key is listed, an unsigned release,
-/// one signed by an unknown key, or one whose files don't match what the manifest declares is refused
-/// outright - release-server.ps1 / release-static-site.ps1 sign with the matching private key.</summary>
+/// Refuses any release it can't verify: with no public keys configured (UpdateOptions.PublicKeys) the
+/// only way to apply one is the explicit UpdateOptions.AllowUnsignedReleases opt-out. Otherwise an
+/// unsigned release, one signed by an unknown key, one whose files don't match what the manifest
+/// declares, or one whose signed version isn't the version being applied (a replayed older release) is
+/// refused outright - release-server.ps1 / release-static-site.ps1 sign with the matching private key.</summary>
 public sealed class ReleaseVerifier(ILogger<ReleaseVerifier> logger)
 {
     private const string Algorithm = "RS256";
@@ -21,13 +22,24 @@ public sealed class ReleaseVerifier(ILogger<ReleaseVerifier> logger)
     private const string SignatureFileName = "manifest.json.sig";
 
     /// <summary>Verifies the release staged at <paramref name="stagedDir"/> against its own bundled
-    /// manifest.json/.sig, if <paramref name="trustedPublicKeys"/> is non-empty (a no-op otherwise -
-    /// see the class remarks). Throws if the release is unsigned, signed by an untrusted key, or its
-    /// files don't match the signed manifest.</summary>
-    public void VerifyIfRequired(string stagedDir, IReadOnlyList<string> trustedPublicKeys)
+    /// manifest.json/.sig. <paramref name="expectedVersion"/> is the version the update server
+    /// announced and the caller is about to apply; <paramref name="currentVersion"/> is what's running
+    /// now. Throws if the release is unsigned (and unsigned releases aren't explicitly allowed), signed
+    /// by an untrusted key, its files don't match the signed manifest, or the signed version isn't
+    /// <paramref name="expectedVersion"/> and newer than <paramref name="currentVersion"/>.</summary>
+    public void Verify(string stagedDir, UpdateOptions updateOptions, string? expectedVersion, string? currentVersion)
     {
+        var trustedPublicKeys = updateOptions.PublicKeys;
         if (trustedPublicKeys.Count == 0)
         {
+            if (!updateOptions.AllowUnsignedReleases)
+            {
+                throw new InvalidOperationException(
+                    "Refusing to apply an unverified release: UpdateOptions.PublicKeys is empty, so nothing can vouch for it. " +
+                    "Add the release signing public key to UpdateOptions.PublicKeys (recommended), or set UpdateOptions.AllowUnsignedReleases to true " +
+                    "to trust the update server connection alone.");
+            }
+            logger.LogWarning("Applying a release without verifying it (UpdateOptions.AllowUnsignedReleases is set and no PublicKeys are configured).");
             return;
         }
 
@@ -46,9 +58,30 @@ public sealed class ReleaseVerifier(ILogger<ReleaseVerifier> logger)
             throw new InvalidOperationException("Release signature verification failed - refusing to apply an unsigned or tampered release.");
         }
 
-        VerifyFileHashes(stagedDir, manifestBytes);
-        logger.LogInformation("Release signature and file hashes verified against manifest.json.");
+        var manifest = VerifyFileHashes(stagedDir, manifestBytes);
+        VerifyVersion(manifest.Version, expectedVersion, currentVersion);
+        logger.LogInformation("Release signature, version and file hashes verified against manifest.json.");
     }
+
+    // The signature covers the manifest's own "version", unlike latest.json's (unsigned) one - without
+    // this, an older but validly-signed release could be replayed as if it were the announced update.
+    private static void VerifyVersion(string? signedVersion, string? expectedVersion, string? currentVersion)
+    {
+        if (string.IsNullOrEmpty(signedVersion))
+        {
+            throw new InvalidOperationException("The signed manifest carries no version - refusing to apply a release that can't be tied to the announced version.");
+        }
+        if (!string.Equals(Core(signedVersion), Core(expectedVersion), StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException($"The signed manifest is for version '{signedVersion}', not the announced '{expectedVersion}' - refusing to apply it.");
+        }
+        if (!string.IsNullOrEmpty(currentVersion) && !UpdateVersionComparer.IsNewer(signedVersion, currentVersion))
+        {
+            throw new InvalidOperationException($"The signed release version '{signedVersion}' is not newer than the running '{currentVersion}' - refusing a downgrade.");
+        }
+    }
+
+    private static string Core(string? version) => (version ?? string.Empty).Split('+', 2)[0].Trim();
 
     private static bool VerifySignature(byte[] payload, string envelopeJson, IReadOnlyList<string> publicKeys)
     {
@@ -109,7 +142,7 @@ public sealed class ReleaseVerifier(ILogger<ReleaseVerifier> logger)
     // Rejects a mismatch in EITHER direction: a file the manifest declares but the release doesn't
     // contain, or one the release contains but the (signed) manifest never mentions - the latter is
     // exactly how a tampered zip could smuggle in an extra file the signature never covered.
-    private static void VerifyFileHashes(string stagedDir, byte[] manifestBytes)
+    private static ManifestDocument VerifyFileHashes(string stagedDir, byte[] manifestBytes)
     {
         var manifest = JsonSerializer.Deserialize<ManifestDocument>(manifestBytes)
             ?? throw new InvalidOperationException("manifest.json could not be parsed.");
@@ -136,6 +169,7 @@ public sealed class ReleaseVerifier(ILogger<ReleaseVerifier> logger)
                 throw new InvalidOperationException($"File hash mismatch for '{relativePath}' - the release may be corrupted or tampered with.");
             }
         }
+        return manifest;
     }
 
     // Same convenience as ReleaseSignature::readKey() on the PHP side: PEM contents inline, or a path
@@ -153,6 +187,9 @@ public sealed class ReleaseVerifier(ILogger<ReleaseVerifier> logger)
 
     private sealed class ManifestDocument
     {
+        [JsonPropertyName("version")]
+        public string? Version { get; set; }
+
         [JsonPropertyName("files")]
         public Dictionary<string, string>? Files { get; set; }
     }

@@ -71,7 +71,7 @@ public sealed class ManagementController(
         }
         try
         {
-            await serverSelfUpdater.ApplyAsync(updateStatus.ZipUrl);
+            await serverSelfUpdater.ApplyAsync(updateStatus.ZipUrl, updateStatus.LatestVersion ?? string.Empty, updateStatus.CurrentVersion);
         }
         catch (Exception ex)
         {
@@ -110,7 +110,7 @@ public sealed class ManagementController(
         }
         try
         {
-            await staticSiteUpdater.ApplyAsync(fileServer, status.LatestVersion, status.ZipUrl);
+            await staticSiteUpdater.ApplyAsync(fileServer, status.LatestVersion, status.ZipUrl, status.CurrentVersion);
         }
         catch (Exception ex)
         {
@@ -124,13 +124,38 @@ public sealed class ManagementController(
 
     [HttpGet("configuration")]
     [RequiresScope(OrbitMeshScope.ConfigurationRead)]
-    public ContentResult GetServerConfiguration() => Content(configWriter.ReadRawJson(), "application/json");
+    public ContentResult GetServerConfiguration()
+    {
+        // Secrets (credential keys/hashes, tokens, API keys, secret variables, Password settings) are masked:
+        // configuration:read is a read-only scope, not a license to lift every credential out of the file.
+        var section = System.Text.Json.Nodes.JsonNode.Parse(configWriter.ReadRawJson())!;
+        ConfigurationRedactor.Redact(section, PasswordSettingResolver());
+        return Content(section.ToJsonString(), "application/json");
+    }
+
+    // Paths a FileServers entry must never claim: they're the API/hub/metrics routes themselves, and the
+    // authentication middleware lets any FileServers path straight through unauthenticated.
+    private static readonly string[] ReservedFileServerPaths = ["/rest", "/signalr", "/metrics", "/openapi", "/packages"];
 
     [HttpPost("configuration")]
     [RequiresScope(OrbitMeshScope.ConfigurationWrite)]
     public IActionResult SetServerConfiguration([FromBody] object rawJson)
     {
-        var json = System.Text.Json.JsonSerializer.Serialize(rawJson);
+        var incoming = System.Text.Json.Nodes.JsonNode.Parse(System.Text.Json.JsonSerializer.Serialize(rawJson));
+        if (incoming == null)
+        {
+            return BadRequest("Configuration is empty.");
+        }
+        // The GET above masked the secrets - put the real ones back wherever the editor sent the
+        // placeholder, so saving an untouched secret doesn't overwrite it with the mask.
+        var passwordResolver = PasswordSettingResolver();
+        var currentSection = System.Text.Json.Nodes.JsonNode.Parse(configWriter.ReadRawJson())!;
+        var restoreError = ConfigurationRedactor.Restore(incoming, currentSection, passwordResolver);
+        if (restoreError != null)
+        {
+            return BadRequest(restoreError);
+        }
+        var json = incoming.ToJsonString();
 
         OrbitMeshOptions candidate;
         try
@@ -140,6 +165,12 @@ public sealed class ManagementController(
         catch (Exception ex)
         {
             return BadRequest($"Configuration is not valid - refusing to save: {ex.Message}");
+        }
+
+        var guardError = CheckConfigurationChange(options.CurrentValue, candidate);
+        if (guardError != null)
+        {
+            return guardError;
         }
 
         // The one check that actually matters: whoever is saving this must still be able to manage
@@ -163,6 +194,76 @@ public sealed class ManagementController(
 
         configWriter.WriteRawJson(json);
         return Ok();
+    }
+
+    private HashSet<string> CallerScopes() =>
+        directory.FindCredential(Request.GetHeaderOrQuery(OrbitMeshHeaderNames.AccessKey))?.Scopes.ToHashSet(StringComparer.Ordinal) ?? [];
+
+    // credentials:manage and configuration:write would otherwise amount to root: a holder could grant itself
+    // (or anyone) any scope, or take over a more privileged credential by replacing its key. The rule is the
+    // usual delegation one - you can only hand out, or touch a credential holding, scopes you hold yourself.
+    private IActionResult? CheckScopeDelegation(IEnumerable<string> scopes, string action)
+    {
+        var callerScopes = CallerScopes();
+        var beyond = scopes.Where(s => !callerScopes.Contains(s)).Distinct().OrderBy(s => s).ToList();
+        return beyond.Count == 0
+            ? null
+            : StatusCode(StatusCodes.Status403Forbidden, $"You can't {action}: it involves scopes you don't hold yourself ({string.Join(", ", beyond)}).");
+    }
+
+    private static bool CredentialDiffers(CredentialOptions a, CredentialOptions b) =>
+        a.AccessKey != b.AccessKey || a.Kind != b.Kind || a.Enable != b.Enable
+        || !a.Scopes.Order(StringComparer.Ordinal).SequenceEqual(b.Scopes.Order(StringComparer.Ordinal));
+
+    // Guards for the raw-configuration editor, which can otherwise rewrite anything the typed endpoints
+    // above refuse: credentials (delegation + no plaintext keys) and FileServers paths.
+    private IActionResult? CheckConfigurationChange(OrbitMeshOptions current, OrbitMeshOptions candidate)
+    {
+        foreach (var credential in candidate.Credentials)
+        {
+            var existing = current.Credentials.FirstOrDefault(c => c.Name.Equals(credential.Name, StringComparison.OrdinalIgnoreCase));
+            if (existing != null && !CredentialDiffers(existing, credential))
+            {
+                continue;
+            }
+            var delegation = CheckScopeDelegation(credential.Scopes.Concat(existing?.Scopes ?? []), $"create or change the credential '{credential.Name}'");
+            if (delegation != null)
+            {
+                return delegation;
+            }
+            var keyChanged = existing == null || existing.AccessKey != credential.AccessKey;
+            var plaintext = credential.Kind == CredentialKind.Human
+                ? !AccessKeyHasher.IsHashed(credential.AccessKey)
+                : !AccessKeyCipher.IsEncrypted(credential.AccessKey);
+            if (keyChanged && plaintext)
+            {
+                return BadRequest($"The AccessKey of '{credential.Name}' can't be written in plaintext through the configuration editor - set it with the Credentials page so it's hashed/encrypted.");
+            }
+        }
+        foreach (var removed in current.Credentials.Where(c => !candidate.Credentials.Any(n => n.Name.Equals(c.Name, StringComparison.OrdinalIgnoreCase))))
+        {
+            var delegation = CheckScopeDelegation(removed.Scopes, $"remove the credential '{removed.Name}'");
+            if (delegation != null)
+            {
+                return delegation;
+            }
+        }
+        foreach (var fileServer in candidate.FileServers.Where(f => f.Enable))
+        {
+            // A path without the leading '/' makes the request pipeline throw on EVERY request (it's used as
+            // a PathString), locking everyone - including the admin who saved it - out of the server.
+            if (!fileServer.Path.Trim().StartsWith('/'))
+            {
+                return BadRequest($"The FileServers path '{fileServer.Path}' must start with '/'.");
+            }
+            var path = "/" + fileServer.Path.Trim().Trim('/');
+            if (path == "/" || ReservedFileServerPaths.Any(reserved => path.Equals(reserved, StringComparison.OrdinalIgnoreCase)
+                || path.StartsWith(reserved + "/", StringComparison.OrdinalIgnoreCase)))
+            {
+                return BadRequest($"The FileServers path '{fileServer.Path}' is reserved - file servers are served without authentication, so they can't shadow the API, hubs or package downloads.");
+            }
+        }
+        return null;
     }
 
     [HttpGet("configuration/reload")]
@@ -263,6 +364,12 @@ public sealed class ManagementController(
             return Conflict($"'{request.Name}' is already in use by an existing edge or credential.");
         }
 
+        var delegation = CheckScopeDelegation([OrbitMeshScope.EdgeConnect], "approve an Edge");
+        if (delegation != null)
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, ((ObjectResult)delegation).Value);
+        }
+
         var accessKey = Convert.ToHexString(System.Security.Cryptography.RandomNumberGenerator.GetBytes(32));
         configWriter.Update(cfg =>
         {
@@ -321,15 +428,35 @@ public sealed class ManagementController(
     public ActionResult<List<PackageOptions>> GetPackages(string edge)
     {
         var s = FindEdge(options.CurrentValue, edge);
-        return s == null ? NotFound() : s.Packages;
+        if (s == null)
+        {
+            return NotFound();
+        }
+        var isPassword = PasswordSettingResolver();
+        return s.Packages.Select(p => WithMaskedSettings(s.Name, p, isPassword)).ToList();
     }
+
+    // A copy of the package entry with Password-typed setting values masked, for read-only API responses.
+    private static PackageOptions WithMaskedSettings(string edgeName, PackageOptions package, ConfigurationRedactor.IsPasswordSetting isPassword) => new()
+    {
+        Name = package.Name,
+        Credential = package.Credential,
+        PackageFile = package.PackageFile,
+        Enable = package.Enable,
+        AutoStart = package.AutoStart,
+        RecoveryOptions = package.RecoveryOptions,
+        Groups = package.Groups,
+        Settings = package.Settings.ToDictionary(
+            kv => kv.Key,
+            kv => !string.IsNullOrEmpty(kv.Value) && isPassword(edgeName, package.Name, kv.Key) ? ConfigurationRedactor.Placeholder : kv.Value)
+    };
 
     [HttpGet("edges/{edge}/packages/{package}")]
     [RequiresScope(OrbitMeshScope.PackagesRead)]
     public ActionResult<PackageOptions> GetPackage(string edge, string package)
     {
         var p = FindPackage(FindEdge(options.CurrentValue, edge), package);
-        return p == null ? NotFound() : p;
+        return p == null ? NotFound() : WithMaskedSettings(edge, p, PasswordSettingResolver());
     }
 
     // Package.Name ends up as a directory name (OrbitMesh.Edge's InstanceDirectory) and as a
@@ -515,8 +642,21 @@ public sealed class ManagementController(
 
     [HttpGet("edges/{edge}/packages/{package}/settings")]
     [RequiresScope(OrbitMeshScope.PackagesRead)]
-    public ActionResult<Dictionary<string, string>> GetPackageSettings(string edge, string package) =>
-        directory.GetSettings(edge, package);
+    public ActionResult<Dictionary<string, string>> GetPackageSettings(string edge, string package)
+    {
+        // Password-typed settings are masked: packages:read is a read-only scope, and the editor only needs
+        // to know a value is set (saving the placeholder back keeps the stored one - see SetPackageSettings).
+        var settings = new Dictionary<string, string>(directory.GetSettings(edge, package), StringComparer.OrdinalIgnoreCase);
+        var isPassword = PasswordSettingResolver();
+        foreach (var name in settings.Keys.ToList())
+        {
+            if (!string.IsNullOrEmpty(settings[name]) && isPassword(edge, package, name))
+            {
+                settings[name] = ConfigurationRedactor.Placeholder;
+            }
+        }
+        return settings;
+    }
 
     public sealed class SetPackageSettingsRequest
     {
@@ -532,6 +672,22 @@ public sealed class ManagementController(
         if (p == null)
         {
             return NotFound();
+        }
+        // A Password setting posted back as the mask means "unchanged" (see GetPackageSettings).
+        var isPassword = PasswordSettingResolver();
+        foreach (var name in request.Settings.Keys.ToList())
+        {
+            if (request.Settings[name] == ConfigurationRedactor.Placeholder && isPassword(edge, package, name))
+            {
+                if (p.Settings.TryGetValue(name, out var existingValue))
+                {
+                    request.Settings[name] = existingValue;
+                }
+                else
+                {
+                    return BadRequest($"'{ConfigurationRedactor.Placeholder}' is only a placeholder for an existing secret, but \"{name}\" has no value yet. Enter the real value.");
+                }
+            }
         }
         var validationError = ValidateJsonAndXmlSettings(p, request.Settings);
         if (validationError != null)
@@ -552,13 +708,43 @@ public sealed class ManagementController(
     private static readonly System.Text.RegularExpressions.Regex SettingVariableTokenPattern = new(@"\{(\w+)\}", System.Text.RegularExpressions.RegexOptions.Compiled);
 
     // "0" stands in for a "{Variable}" token, valid JSON whether it sits bare or inside quotes.
-    private string? ValidateJsonAndXmlSettings(PackageOptions package, Dictionary<string, string> settings)
+    private OrbitMesh.Deployment.PackageManifest? GetManifestOf(PackageOptions package)
     {
         if (!TryResolveZipPath(package.PackageFile ?? package.Name, out var zipPath))
         {
             return null;
         }
-        var manifest = System.IO.File.Exists(zipPath) ? PackageZipHelper.GetManifest(zipPath) : null;
+        return System.IO.File.Exists(zipPath) ? PackageZipHelper.GetManifest(zipPath) : null;
+    }
+
+    // Names of the Password-typed settings declared by a package's manifest (the type isn't stored with
+    // the values, only in the package zip). Memoized per call: the configuration redactor asks once per
+    // setting, and each lookup would otherwise reopen the zip.
+    private ConfigurationRedactor.IsPasswordSetting PasswordSettingResolver()
+    {
+        var cache = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
+        return (edgeName, packageName, settingName) =>
+        {
+            var key = $"{edgeName}/{packageName}";
+            if (!cache.TryGetValue(key, out var names))
+            {
+                var package = FindPackage(FindEdge(options.CurrentValue, edgeName), packageName);
+                var manifest = package == null ? null : GetManifestOf(package);
+                names = manifest == null
+                    ? new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+                    : manifest.Settings
+                        .Where(s => s.Type == OrbitMesh.Deployment.SettingType.Password)
+                        .Select(s => s.Name)
+                        .ToHashSet(StringComparer.OrdinalIgnoreCase);
+                cache[key] = names;
+            }
+            return names.Contains(settingName);
+        };
+    }
+
+    private string? ValidateJsonAndXmlSettings(PackageOptions package, Dictionary<string, string> settings)
+    {
+        var manifest = GetManifestOf(package);
         if (manifest == null)
         {
             return null;
@@ -735,6 +921,12 @@ public sealed class ManagementController(
     [RequiresScope(OrbitMeshScope.CredentialsManage)]
     public IActionResult InsertOrUpdateCredential([FromBody] CredentialOptions credential)
     {
+        var existingNow = options.CurrentValue.Credentials.FirstOrDefault(c => c.Name.Equals(credential.Name, StringComparison.OrdinalIgnoreCase));
+        var delegation = CheckScopeDelegation(credential.Scopes.Concat(existingNow?.Scopes ?? []), $"create or change the credential '{credential.Name}'");
+        if (delegation != null)
+        {
+            return delegation;
+        }
         configWriter.Update(cfg =>
         {
             var existing = cfg.Credentials.FirstOrDefault(c => c.Name.Equals(credential.Name, StringComparison.OrdinalIgnoreCase));
@@ -802,6 +994,21 @@ public sealed class ManagementController(
     [RequiresScope(OrbitMeshScope.CredentialsManage)]
     public IActionResult RemoveCredential(string credential)
     {
+        var target = options.CurrentValue.Credentials.FirstOrDefault(c => c.Name.Equals(credential, StringComparison.OrdinalIgnoreCase));
+        if (target != null)
+        {
+            var delegation = CheckScopeDelegation(target.Scopes, $"remove the credential '{credential}'");
+            if (delegation != null)
+            {
+                return delegation;
+            }
+            // Removing the last credential leaves nothing to log in with and puts the server back into
+            // first-run setup, where the next visitor can create an all-scopes admin.
+            if (options.CurrentValue.Credentials.Count <= 1)
+            {
+                return Conflict("The last credential can't be removed: nothing could log in afterwards, and the server would reopen first-run setup.");
+            }
+        }
         var inUse = options.CurrentValue.Edges.Any(s =>
             s.Credential?.Equals(credential, StringComparison.OrdinalIgnoreCase) == true
             || s.Packages.Any(p => p.Credential?.Equals(credential, StringComparison.OrdinalIgnoreCase) == true));

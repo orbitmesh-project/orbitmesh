@@ -17,7 +17,7 @@ public sealed class EdgeSelfUpdater(
     ReleaseVerifier verifier,
     ILogger<EdgeSelfUpdater> logger)
 {
-    public async Task ApplyAsync(string zipUrl, CancellationToken cancellationToken = default)
+    public async Task ApplyAsync(string zipUrl, string expectedVersion, string? currentVersion, CancellationToken cancellationToken = default)
     {
         var liveDir = AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar);
         var parent = Path.GetDirectoryName(liveDir)
@@ -31,7 +31,7 @@ public sealed class EdgeSelfUpdater(
         Directory.CreateDirectory(stagingDir);
 
         var updateOptions = options.CurrentValue.UpdateOptions;
-        var zipPath = await ReleaseZipDownloader.DownloadToTempFileAsync(httpClientFactory, nameof(EdgeSelfUpdater), zipUrl, updateOptions.Token, cancellationToken);
+        var zipPath = await ReleaseZipDownloader.DownloadToTempFileAsync(httpClientFactory, nameof(EdgeSelfUpdater), zipUrl, updateOptions.Token, updateOptions.ServerUrl, cancellationToken);
         try
         {
             ZipFile.ExtractToDirectory(zipPath, stagingDir);
@@ -41,7 +41,7 @@ public sealed class EdgeSelfUpdater(
                 throw new InvalidOperationException("Downloaded release does not contain OrbitMesh.Edge.dll - refusing to apply it.");
             }
 
-            verifier.VerifyIfRequired(stagingDir, updateOptions.PublicKeys);
+            verifier.Verify(stagingDir, updateOptions, expectedVersion, currentVersion);
 
             PreserveLiveState(liveDir, stagingDir);
         }
