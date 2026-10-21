@@ -27,8 +27,14 @@ public sealed class EdgeHub(
         Context.CaptureConnectionMetadata();
         if (IsAuthorized())
         {
-            // Clear a stale pending entry if this InstanceId just connected successfully.
-            if (Context.GetInstanceId() is { Length: > 0 } connectedInstanceId)
+            // Picked up its approved key and reconnected for real - drop the plaintext key still held
+            // for pickup. Only when the InstanceId is the one configured for THIS Edge name: the
+            // header is client-supplied, so any authorized Edge could otherwise delete another
+            // Edge's pending/approved entry by claiming its InstanceId.
+            var connectedEdgeName = Context.GetEdgeName();
+            if (Context.GetInstanceId() is { Length: > 0 } connectedInstanceId
+                && directory.Current.Edges.Any(e => e.Name.Equals(connectedEdgeName, StringComparison.OrdinalIgnoreCase)
+                    && string.Equals(e.InstanceId, connectedInstanceId, StringComparison.OrdinalIgnoreCase)))
             {
                 pendingEdgeRegistry.Remove(connectedInstanceId);
             }
@@ -50,7 +56,7 @@ public sealed class EdgeHub(
             "EdgeHub connection rejected for EdgeName={EdgeName}. " +
             "Add a matching entry under OrbitMesh:Edges in appsettings.json with a valid Credential, " +
             "or wait for its REST enrollment (rest/enroll) to be approved from the Console.",
-            Context.GetEdgeName());
+            Context.GetEdgeName().ForLog());
         Context.Abort();
     }
 

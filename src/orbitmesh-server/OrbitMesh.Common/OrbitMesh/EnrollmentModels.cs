@@ -7,8 +7,10 @@ public sealed record EnrollRequest(string EdgeName, string InstanceId, string Ma
 
 /// <summary>Response to both <c>POST rest/enroll</c> and <c>GET rest/enroll/{instanceId}/status</c>.
 /// <see cref="AccessKey"/> is only populated when <see cref="Status"/> is
-/// <see cref="EnrollmentStatus.Approved"/> - see <see cref="EnrollmentStatus"/> for the possible values.</summary>
-public sealed record EnrollStatusResponse(string Status, string? AccessKey);
+/// <see cref="EnrollmentStatus.Approved"/> - see <see cref="EnrollmentStatus"/> for the possible values.
+/// <see cref="EdgeName"/> is the name the admin approved the Edge under, which may differ from the one
+/// it declared: the Edge must adopt it, since that's the name its credential is bound to.</summary>
+public sealed record EnrollStatusResponse(string Status, string? AccessKey, string? EdgeName = null);
 
 /// <summary>Possible <see cref="EnrollStatusResponse.Status"/> values.</summary>
 public static class EnrollmentStatus

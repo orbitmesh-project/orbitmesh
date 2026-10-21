@@ -4,6 +4,33 @@ Format: [Keep a Changelog](https://keepachangelog.com/). Versions match `<Versio
 `OrbitMesh.Edge.csproj`, which is what's reported to the update server (see
 `Services/EdgeSelfUpdater.cs` and `Services/EdgeUpdateCheckService.cs`).
 
+## [1.1.7]
+
+### Fixed
+
+- The REST enrollment fallback introduced in 1.1.6 never actually ran: the Server aborts an
+  unauthorized SignalR connection right after the handshake, so `StartAsync` succeeded and only
+  `RegisterEdge` failed - an error the Edge swallowed. It now falls back whenever it isn't connected
+  *and registered*, and stops the connection so it can't sit in the endless-reconnect loop.
+- The Windows service restart watcher never worked: with `powershell -Command <script>`, trailing
+  `-ProcessId`/`-ServiceName` arguments aren't bound to the script's `param()` block, so the wait loop
+  ended immediately (and the service name was injectable into the command line). Values now travel as
+  environment variables, and `UpdateOptions.ServiceOrUnitName` is validated.
+- After a lost approval (server restart, expiry, dismissed by an admin) the Edge stayed on "unknown"
+  forever; it now enrolls again.
+- Enrollment can no longer restart the Edge in a loop: a key that's already applied is never re-applied,
+  and the Edge retries its normal connection (at most every 30s) instead.
+
+### Added
+
+- Enrollment requests carry a per-Edge secret (`enroll-secret.txt` next to `instance-id.txt`), and the
+  Edge adopts the Edge name an admin approved it under along with its AccessKey.
+- A failing enrollment request is logged once per distinct error rather than silently retried.
+
+### Changed
+
+- Dependencies bumped (Microsoft.Extensions.* 10.0.13, NLog 6.2.2).
+
 ## [1.1.6]
 
 ### Changed

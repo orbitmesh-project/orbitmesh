@@ -182,15 +182,17 @@ export default {
             </div>
             <div v-if="store.managementAvailable && pendingEdges.length > 0" class="deploy-form">
                 <h3>Pending edges</h3>
-                <p style="margin-top:-4px;color:var(--text-muted,#888)">Connected but not yet authorized - a matching credential and edge entry are created for you on approval.</p>
+                <p style="margin-top:-4px;color:var(--text-muted,#888)">Waiting for approval - a matching credential and edge entry are created for you on approval. Everything in the first columns is self-declared by whoever enrolled, unauthenticated: only approve an edge you recognize (machine, platform and address).</p>
                 <div class="table-scroll">
                 <table class="data-table">
                     <thead>
-                        <tr><th>Declared name</th><th style="width:140px">From</th><th style="width:150px">First seen</th><th style="width:150px">Last seen</th><th style="width:260px">Approve as</th><th style="width:160px">Actions</th></tr>
+                        <tr><th>Declared name</th><th style="width:150px">Machine</th><th style="width:90px">Platform</th><th style="width:140px">From</th><th style="width:150px">First seen</th><th style="width:150px">Last seen</th><th style="width:260px">Approve as</th><th style="width:160px">Actions</th></tr>
                     </thead>
                     <tbody>
                         <tr v-for="p in pendingEdges" :key="p.InstanceId">
                             <td>{{ p.EdgeName }}</td>
+                            <td>{{ p.MachineName }}</td>
+                            <td>{{ p.Platform }}</td>
                             <td>{{ p.RemoteIp }}</td>
                             <td>{{ new Date(p.FirstSeenUtc).toLocaleString() }}</td>
                             <td>{{ new Date(p.LastSeenUtc).toLocaleString() }}</td>

@@ -5,22 +5,23 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <!-- Reported to the console and to the update server (see Services/UpdateCheckService.cs) -
          bump this on every release meant to be offered as a self-update. -->
-    <Version>1.2.19</Version>
+    <Version>1.2.20</Version>
     <!-- ServerVersion.Current reads this - without it the SDK appends "+<git-sha>", which breaks
          UpdateVersionComparer's exact-match fallback and shows an update as available forever. -->
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="Cronos" Version="0.11.0" />
-    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.11" />
-    <PackageReference Include="Microsoft.Extensions.Hosting.Systemd" Version="10.0.11" />
-    <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" Version="10.0.11" />
-    <PackageReference Include="Microsoft.OpenApi" Version="2.12.0" />
-    <PackageReference Include="NLog.Extensions.Logging" Version="6.2.0" />
+    <PackageReference Include="Cronos" Version="0.13.0" />
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.13" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.Systemd" Version="10.0.13" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" Version="10.0.13" />
+    <PackageReference Include="Microsoft.OpenApi" Version="2.12.2" />
+    <PackageReference Include="NLog.Extensions.Logging" Version="6.2.2" />
     <PackageReference Include="NuGet.Protocol" Version="7.9.0" />
     <PackageReference Include="OpenTelemetry.Exporter.Prometheus.AspNetCore" Version="1.17.0-beta.1" />
-    <PackageReference Include="OpenTelemetry.Extensions.Hosting" Version="1.17.0" />
-    <PackageReference Include="OpenTelemetry.Instrumentation.AspNetCore" Version="1.17.0" />
+    <PackageReference Include="OpenTelemetry.Extensions.Hosting" Version="1.20.1" />
+    <PackageReference Include="OpenTelemetry.Instrumentation.AspNetCore" Version="1.20.0" />
+    <PackageReference Include="System.Security.Cryptography.Pkcs" Version="10.0.13" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\OrbitMesh.Common\OrbitMesh.Common.csproj" />

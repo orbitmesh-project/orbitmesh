@@ -4,6 +4,47 @@ Format: [Keep a Changelog](https://keepachangelog.com/). Versions match `<Versio
 `OrbitMesh.Server.csproj`, which is what's reported to the update server (see
 `Services/ServerSelfUpdater.cs` and `Services/UpdateCheckService.cs`).
 
+## [1.2.20]
+
+Security review follow-up.
+
+### Security
+
+- `rest/enroll` (unauthenticated) is now bounded and authenticated per Edge: the InstanceId must be a
+  GUID, text fields are length-capped, the request body is limited to 4KB, at most 100 entries (5 per
+  source IP) are held, and a pending entry expires after 15 minutes without a poll. Every call carries
+  an `EnrollSecret` header (only its SHA-256 is kept), so knowing an InstanceId - visible to any
+  `edges:read` user in the pending list - is no longer enough to collect an approved AccessKey or to
+  take over another Edge's pending entry. Status responses are `Cache-Control: no-store`.
+- The pending-edge list no longer exposes anything but identity fields (name, machine, platform,
+  address, timestamps); the Console now shows machine and platform so an admin can recognise what
+  they're approving.
+- Approving a pending Edge validates the chosen name (1-64 letters/digits/`_`/`-`, not a reserved
+  pseudo-edge name such as `Consumer` or `Management`, no `.`), closing a collision with
+  `<edge>.<package>` credential names.
+- `EdgeHub` only drops an Edge's pending entry on connect when the claimed InstanceId is the one
+  configured for that same Edge name (the header is client-supplied).
+- `rest/orbitmesh/SendMessage` (GET and POST) now requires the `messages:execute` scope like the hub and
+  consumer equivalents; `Authorizations.Messages` alone is default-Allow for most credentials.
+- A package's AccessKey is no longer kept on (or broadcast with) the package state shown to
+  `packages:read` ControlHub subscribers - the Edge echoes back the exact description it was pushed,
+  which includes the plaintext key.
+- `upload-package` resolves the package file name through the same containment check as every other
+  path (the name comes from inside the uploaded zip), and package name `.` is rejected.
+- Unauthenticated-connection log lines in `EdgeHub` now go through `ForLog()`.
+
+### Added
+
+- The approval carries the approved Edge name to the Edge (`EnrollStatusResponse.EdgeName`), so
+  renaming an Edge at approval time no longer leaves it connecting under a name its credential
+  doesn't match.
+
+### Changed
+
+- Dependencies bumped (Microsoft.* 10.0.13, OpenTelemetry 1.20.x, Cronos 0.13, NLog 6.2.2).
+  `Microsoft.OpenApi` stays on 2.x (2.12.2): 3.x is incompatible with the source generator in
+  `Microsoft.AspNetCore.OpenApi` 10.0.13.
+
 ## [1.2.19]
 
 ### Changed

@@ -21,4 +21,9 @@ public static class OrbitMeshHeaderNames
     /// <summary>A GUID the Edge generates on first run and persists locally - unlike EdgeName, stable
     /// and unique per install. Sent on every connection attempt, authorized or not.</summary>
     public const string InstanceId = "InstanceId";
+    /// <summary>A random secret the Edge generates on first run and persists locally, sent on every
+    /// <c>rest/enroll</c> call. The Server keeps only its hash: it's what proves a status poll comes
+    /// from the Edge that enrolled, since the InstanceId alone is visible to anyone who can list
+    /// pending Edges.</summary>
+    public const string EnrollSecret = "EnrollSecret";
 }

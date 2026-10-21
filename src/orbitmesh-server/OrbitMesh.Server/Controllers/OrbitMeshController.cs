@@ -26,11 +26,15 @@ public sealed class OrbitMeshController(
     [HttpGet("CheckAccess")]
     public IActionResult CheckAccess() => Ok();
 
+    // Same scope OrbitMeshHub.SendMessage and ConsumerController.SendMessage already require -
+    // Authorizations.Messages alone is default-Allow for most credentials, so it can't be the only gate.
     [HttpPost("SendMessage")]
+    [RequiresScope(OrbitMeshScope.MessagesExecute)]
     public Task<IActionResult> SendMessage([FromBody] SendMessageRequest request) =>
         SendMessageCore(request.Scope, request.Key, request.Data);
 
     [HttpGet("SendMessage")]
+    [RequiresScope(OrbitMeshScope.MessagesExecute)]
     public Task<IActionResult> SendMessage(MessageScope.ScopeType scope, string key, string? data = null, string? args = null, string? sagaId = null)
     {
         var messageScope = MessageScope.Create(scope, string.IsNullOrEmpty(args) ? null : args.Split(','));

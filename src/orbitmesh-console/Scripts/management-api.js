@@ -61,6 +61,12 @@ async function request(method, httpMethod, parameters, body) {
     return response.text();
 }
 
+// Every value interpolated into a path below goes through this: names/ids come from the server and some
+// are attacker-influenced (a pending Edge's self-declared InstanceId, package names), and an unencoded
+// "../" would be normalized by the browser into a different management endpoint, called with the
+// signed-in admin's own AccessKey.
+const enc = encodeURIComponent;
+
 const get = (method, parameters) => request(method, "GET", parameters);
 const post = (method, body, parameters) => request(method, "POST", parameters, body === undefined ? {} : body);
 const del = (method, parameters) => request(method, "DELETE", parameters);
@@ -83,42 +89,42 @@ export const setGlobalRecoveryOptions = (recoveryOptions) => post("configuration
 // Edges
 export const getEdges = () => get("edges");
 export const upsertEdge = (edgeName, credential) => post("edges", { Name: edgeName, Credential: credential });
-export const removeEdge = (edgeName) => del("edges/" + edgeName);
+export const removeEdge = (edgeName) => del(`edges/${enc(edgeName)}`);
 
 // Edges - pending (connected but not yet authorized - see IPendingEdgeRegistry)
 export const getPendingEdges = () => get("edges/pending");
-export const approvePendingEdge = (instanceId, name) => post(`edges/pending/${instanceId}/approve`, { Name: name });
-export const dismissPendingEdge = (instanceId) => del(`edges/pending/${instanceId}`);
+export const approvePendingEdge = (instanceId, name) => post(`edges/pending/${enc(instanceId)}/approve`, { Name: name });
+export const dismissPendingEdge = (instanceId) => del(`edges/pending/${enc(instanceId)}`);
 
 // Security - IPs currently locked out by the brute-force limiter (see LoginAttemptLimiter)
 export const getLockedOutIps = () => get("security/lockouts");
-export const unlockIp = (ip) => del(`security/lockouts/${ip}`);
+export const unlockIp = (ip) => del(`security/lockouts/${enc(ip)}`);
 
 // Packages
-export const getPackageInstances = (edgeName) => get(`edges/${edgeName}/packages`);
-export const getPackageInstance = (edgeName, packageName) => get(`edges/${edgeName}/packages/${packageName}`);
+export const getPackageInstances = (edgeName) => get(`edges/${enc(edgeName)}/packages`);
+export const getPackageInstance = (edgeName, packageName) => get(`edges/${enc(edgeName)}/packages/${enc(packageName)}`);
 export const upsertPackage = (edgeName, packageName, credential, packageFile, enable, autoStart) =>
-    post(`edges/${edgeName}/packages`, { Name: packageName, Credential: credential, PackageFile: packageFile, Enable: enable, AutoStart: autoStart });
-export const removePackage = (edgeName, packageName) => del(`edges/${edgeName}/packages/${packageName}`);
-export const getPackageRecoveryOptions = (edgeName, packageName) => get(`edges/${edgeName}/packages/${packageName}/recoveryoptions`);
+    post(`edges/${enc(edgeName)}/packages`, { Name: packageName, Credential: credential, PackageFile: packageFile, Enable: enable, AutoStart: autoStart });
+export const removePackage = (edgeName, packageName) => del(`edges/${enc(edgeName)}/packages/${enc(packageName)}`);
+export const getPackageRecoveryOptions = (edgeName, packageName) => get(`edges/${enc(edgeName)}/packages/${enc(packageName)}/recoveryoptions`);
 export const setPackageRecoveryOptions = (edgeName, packageName, recoveryOptions) =>
-    post(`edges/${edgeName}/packages/${packageName}/recoveryoptions`, recoveryOptions);
-export const getPackageGroups = (edgeName, packageName) => get(`edges/${edgeName}/packages/${packageName}/groups`);
-export const setPackageGroups = (edgeName, packageName, groups) => post(`edges/${edgeName}/packages/${packageName}/groups`, groups);
-export const getPackageSettings = (edgeName, packageName) => get(`edges/${edgeName}/packages/${packageName}/settings`);
+    post(`edges/${enc(edgeName)}/packages/${enc(packageName)}/recoveryoptions`, recoveryOptions);
+export const getPackageGroups = (edgeName, packageName) => get(`edges/${enc(edgeName)}/packages/${enc(packageName)}/groups`);
+export const setPackageGroups = (edgeName, packageName, groups) => post(`edges/${enc(edgeName)}/packages/${enc(packageName)}/groups`, groups);
+export const getPackageSettings = (edgeName, packageName) => get(`edges/${enc(edgeName)}/packages/${enc(packageName)}/settings`);
 export const setPackageSettings = (edgeName, packageName, settings, refreshPackage) =>
-    post(`edges/${edgeName}/packages/${packageName}/settings`, { settings, refreshPackage: !!refreshPackage });
+    post(`edges/${enc(edgeName)}/packages/${enc(packageName)}/settings`, { settings, refreshPackage: !!refreshPackage });
 
 // Variables - a secret's Value is never included here; revealVariable() decrypts it on demand.
 export const getVariables = () => get("variables");
-export const revealVariable = (name) => get(`variables/${name}/reveal`);
+export const revealVariable = (name) => get(`variables/${enc(name)}/reveal`);
 export const upsertVariable = (name, value, isSecret) => post("variables", { Name: name, Value: value, IsSecret: !!isSecret });
-export const removeVariable = (name) => del("variables/" + name);
+export const removeVariable = (name) => del(`variables/${enc(name)}`);
 
 // Scheduled tasks - fires a message on a cron schedule, see OrbitMesh.Server's ScheduledTaskRunner.
 export const getScheduledTasks = () => get("scheduledtasks");
 export const upsertScheduledTask = (task) => post("scheduledtasks", task);
-export const removeScheduledTask = (name) => del("scheduledtasks/" + name);
+export const removeScheduledTask = (name) => del(`scheduledtasks/${enc(name)}`);
 
 // First-run bootstrap - unauthenticated (see AccessKeyAuthenticationMiddleware's /rest/management/setup
 // bypass), called from Login.js before any credential exists, so both take serverUri directly instead
@@ -148,18 +154,18 @@ export const getCredentials = (includeAccessKeys) => get("credentials", { includ
 // OrbitMeshScope strings (see Pages/Credentials.js's scope matrix).
 export const upsertCredential = (name, accessKey, kind, enable, scopes) =>
     post("credentials", { Name: name, AccessKey: accessKey || "", Kind: kind, Enable: enable, Scopes: scopes || [] });
-export const removeCredential = (name) => del("credentials/" + name);
-export const getCredentialAuthorizations = (name) => get(`credentials/${name}/authorizations`);
-export const setCredentialAuthorizations = (name, authorizations) => post(`credentials/${name}/authorizations`, authorizations);
+export const removeCredential = (name) => del(`credentials/${enc(name)}`);
+export const getCredentialAuthorizations = (name) => get(`credentials/${enc(name)}/authorizations`);
+export const setCredentialAuthorizations = (name, authorizations) => post(`credentials/${enc(name)}/authorizations`, authorizations);
 
 // Package Repository - local upload/download, plus browsing/installing from configured NuGet feeds.
 export const getPackages = () => get("packages");
-export const getPackage = (packageName) => get("packages/" + packageName);
-export const renamePackageFile = (packageName, newName) => post("packages/" + packageName, { newName });
-export const removePackageFile = (packageName) => del("packages/" + packageName);
+export const getPackage = (packageName) => get(`packages/${enc(packageName)}`);
+export const renamePackageFile = (packageName, newName) => post(`packages/${enc(packageName)}`, { newName });
+export const removePackageFile = (packageName) => del(`packages/${enc(packageName)}`);
 export const downloadPackage = (url) => post("download-package", { url });
 export const searchNuGetFeeds = (q) => get("packages/nuget/search", { q: q || "" });
-export const getNuGetPackageVersions = (feed, id) => get(`packages/nuget/${feed}/${id}/versions`);
+export const getNuGetPackageVersions = (feed, id) => get(`packages/nuget/${enc(feed)}/${enc(id)}/versions`);
 export const installNuGetPackage = (feed, id, version) => post("packages/nuget/install", { Feed: feed, Id: id, Version: version });
 export const checkNuGetUpdates = () => get("packages/nuget/check-updates");
 // multipart/form-data, not JSON - the request() helper always JSON-encodes, so this bypasses it.
@@ -174,8 +180,8 @@ export async function uploadPackage(file) {
         throw new ManagementApiError(response.status, await response.text().catch(() => ""));
     }
 }
-export const getPackageIconUri = (packageName) => buildUrl(`packages/${packageName}/icon`, { ...defaultHeaders });
-export const getSettingXsdSchema = (packageName, settingName) => get(`packages/${packageName}/settings/${settingName}/xsd`);
+export const getPackageIconUri = (packageName) => buildUrl(`packages/${enc(packageName)}/icon`, { ...defaultHeaders });
+export const getSettingXsdSchema = (packageName, settingName) => get(`packages/${enc(packageName)}/settings/${enc(settingName)}/xsd`);
 
 // Self-update
 export const getUpdateStatus = () => get("update/status");
@@ -183,4 +189,4 @@ export const checkForUpdate = () => post("update/check");
 export const applyUpdate = () => post("update/apply");
 export const getStaticSiteUpdates = () => get("update/sites");
 export const checkStaticSiteUpdates = () => post("update/sites/check");
-export const applyStaticSiteUpdate = (slug) => post(`update/sites/${slug}/apply`);
+export const applyStaticSiteUpdate = (slug) => post(`update/sites/${enc(slug)}/apply`);

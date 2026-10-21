@@ -207,8 +207,8 @@ export default {
                 <thead>
                     <tr>
                         <th style="width:140px">Name</th><th style="width:110px">Cron</th><th>Target</th>
-                        <th style="width:130px">Credential</th><th style="width:90px">Enable</th>
-                        <th style="width:150px">Last run</th><th style="width:220px">Actions</th>
+                        <th style="width:130px">Credential</th><th style="width:100px">Enable</th>
+                        <th style="width:150px">Last run</th><th>Actions</th>
                     </tr>
                 </thead>
                 <tbody>

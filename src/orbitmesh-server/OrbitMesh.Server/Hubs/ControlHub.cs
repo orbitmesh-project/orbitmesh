@@ -256,6 +256,11 @@ public sealed class ControlHub(
         }
         if (packageDescription != null)
         {
+            // The Edge echoes back the exact PackageDescription it was pushed, which carries the
+            // package's plaintext AccessKey (EdgeHub.PushPackageListAsync, includeAccessKey: true).
+            // info.Package is broadcast as-is to every packages:read ControlHub subscriber, so the key
+            // must never be kept on it.
+            packageDescription.AccessKey = null;
             info.Package = packageDescription;
         }
         var isTransientNoop = (state == PackageState.Stopping && info.State == PackageState.Stopped)

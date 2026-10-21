@@ -230,19 +230,32 @@ public sealed class ManagementController(
 
     public sealed record ApprovePendingEdgeRequest(string Name);
 
+    private static readonly System.Text.RegularExpressions.Regex ApprovedEdgeNamePattern = new("^[A-Za-z0-9_-]{1,64}$", System.Text.RegularExpressions.RegexOptions.Compiled);
+
+    private static readonly HashSet<string> ReservedEdgeNames = new(StringComparer.OrdinalIgnoreCase)
+    {
+        OrbitMeshDefaultNames.ManagementEdgeName,
+        OrbitMeshDefaultNames.ControllerEdgeName,
+        OrbitMeshDefaultNames.ConsumerEdgeName,
+        OrbitMeshDefaultNames.DeveloperEdgeName,
+        OrbitMeshDefaultNames.EdgePackageName
+    };
+
     // CredentialsManage, not EdgesWrite: this mints a new credential too.
     [HttpPost("edges/pending/{instanceId}/approve")]
     [RequiresScope(OrbitMeshScope.CredentialsManage)]
     public ActionResult<object> ApprovePendingEdge(string instanceId, [FromBody] ApprovePendingEdgeRequest request)
     {
-        var pending = pendingEdgeRegistry.Get(instanceId);
+        var pending = pendingEdgeRegistry.GetPending(instanceId);
         if (pending == null)
         {
             return NotFound("No pending Edge with this InstanceId - it may have already been approved or given up retrying.");
         }
-        if (string.IsNullOrWhiteSpace(request.Name))
+        // '.' would make "<edge>.<package>" credential names ambiguous (EnsurePackageCredential), and
+        // the pseudo-edge names are what hub/REST connections claim to bypass edge-name binding.
+        if (string.IsNullOrWhiteSpace(request.Name) || !ApprovedEdgeNamePattern.IsMatch(request.Name) || ReservedEdgeNames.Contains(request.Name))
         {
-            return BadRequest("Name is required.");
+            return BadRequest("Name is required: 1-64 letters, digits, '_' or '-', and not a reserved name.");
         }
         if (options.CurrentValue.Edges.Any(e => e.Name.Equals(request.Name, StringComparison.OrdinalIgnoreCase))
             || options.CurrentValue.Credentials.Any(c => c.Name.Equals(request.Name, StringComparison.OrdinalIgnoreCase)))
@@ -266,7 +279,7 @@ public sealed class ManagementController(
         // Kept (not removed) with the new key attached - the Edge picks it up on its next
         // rest/enroll status poll (every 5s) rather than needing a live SignalR connection to push
         // down. See PendingEdgeRegistry's remarks for when this gets purged.
-        pendingEdgeRegistry.MarkApproved(instanceId, accessKey);
+        pendingEdgeRegistry.MarkApproved(instanceId, accessKey, request.Name);
         return Ok(new { name = request.Name, accessKey });
     }
 
@@ -325,6 +338,7 @@ public sealed class ManagementController(
     // accepted, stops a malicious or buggy Management API caller before it reaches the Edge.
     private static bool IsValidPackageName(string? name) =>
         !string.IsNullOrWhiteSpace(name)
+        && name != "."
         && !name.Contains('/', StringComparison.Ordinal)
         && !name.Contains('\\', StringComparison.Ordinal)
         && !name.Contains("..", StringComparison.Ordinal)
@@ -1246,7 +1260,13 @@ public sealed class ManagementController(
             System.IO.File.Delete(tempPath);
             return UnprocessableEntity("No PackageInfo.xml manifest found in this package.");
         }
-        var destination = Path.Combine(dir, $"{manifest.Name}.zip");
+        // manifest.Name comes from inside the uploaded zip itself - same containment check as every
+        // other path that turns a caller-supplied name into a file under PackagesRootDirectory.
+        if (!IsValidPackageName(manifest.Name) || !TryResolveZipPath(manifest.Name, out var destination))
+        {
+            System.IO.File.Delete(tempPath);
+            return BadRequest($"'{manifest.Name}' is not a valid package name.");
+        }
         if (System.IO.File.Exists(destination))
         {
             System.IO.File.Delete(destination);

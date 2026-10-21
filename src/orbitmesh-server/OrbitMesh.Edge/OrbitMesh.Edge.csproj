@@ -7,18 +7,18 @@
     <UserSecretsId>dotnet-OrbitMesh.Edge-79cfbc5f-9cf9-4a22-9648-e7f505052633</UserSecretsId>
     <!-- Reported to the update server as the "from" version (see Services/EdgeVersion.cs) - bump
          this on every release meant to be offered as a self-update. -->
-    <Version>1.1.6</Version>
+    <Version>1.1.7</Version>
     <!-- Same reasoning as OrbitMesh.Server.csproj - prevents a "+<git-sha>" suffix from breaking
          UpdateVersionComparer's exact-match fallback. -->
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.11" />
-    <PackageReference Include="Microsoft.Extensions.Hosting.Systemd" Version="10.0.11" />
-    <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" Version="10.0.11" />
-    <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.11" />
-    <PackageReference Include="NLog.Extensions.Logging" Version="6.2.0" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.13" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.Systemd" Version="10.0.13" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" Version="10.0.13" />
+    <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.13" />
+    <PackageReference Include="NLog.Extensions.Logging" Version="6.2.2" />
   </ItemGroup>
 
   <ItemGroup>
@@ -34,9 +34,10 @@
     <Content Remove="Packages\**" />
     <None Remove="Packages\**" />
   </ItemGroup>
-  <!-- instance-id.txt (InstanceIdProvider) is a runtime artifact too - same reasoning as Packages/ above. -->
+  <!-- instance-id.txt (InstanceIdProvider) and enroll-secret.txt (EnrollSecretProvider) are runtime
+       artifacts too - same reasoning as Packages/ above. -->
   <ItemGroup>
-    <Content Remove="instance-id.txt" />
-    <None Remove="instance-id.txt" />
+    <Content Remove="instance-id.txt;enroll-secret.txt" />
+    <None Remove="instance-id.txt;enroll-secret.txt" />
   </ItemGroup>
 </Project>

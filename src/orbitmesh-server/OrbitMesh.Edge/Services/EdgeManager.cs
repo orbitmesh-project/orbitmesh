@@ -114,20 +114,14 @@ public sealed class EdgeManager(IOptions<EdgeOptions> optionsAccessor, ILogger<E
             return Task.CompletedTask;
         };
 
-        try
+        if (!await TryConnectAsync(cancellationToken))
         {
-            await _connection.StartAsync(cancellationToken);
-            await RegisterAsync();
-        }
-        catch (Exception ex)
-        {
-            // Not yet approved (or the server/network is briefly unreachable) - the Edge would
-            // otherwise never come back on its own, since a rejected SignalR connection isn't retried
-            // by WithOrbitMeshDefaults()'s policy (that only governs reconnects of a connection that
-            // was actually established once). Fall back to polling rest/enroll instead, forever - it
-            // needs nothing this same failure wouldn't also need, so there's no separate "give up"
-            // case to handle.
-            logger.LogWarning(ex, "Unable to connect to the OrbitMesh server - falling back to REST enrollment (not yet approved, or the server is unreachable).");
+            // Not yet approved (or the server/network is briefly unreachable). The Server aborts an
+            // unauthorized connection right after the handshake, so StartAsync itself usually succeeds
+            // and it's the first call (RegisterEdge) that fails - which is why this keys off
+            // TryConnectAsync's result rather than an exception. Poll rest/enroll instead, forever; it
+            // falls back to retrying the SignalR connection if the server says it already knows us.
+            logger.LogWarning("Not connected to the OrbitMesh server - falling back to REST enrollment (not yet approved, or the server is unreachable).");
             _ = EnrollAndPollAsync(_cts.Token);
         }
 
@@ -136,13 +130,45 @@ public sealed class EdgeManager(IOptions<EdgeOptions> optionsAccessor, ILogger<E
         _ = ReportUsageLoopAsync(_cts.Token);
     }
 
+    // True once connected AND registered. On failure the connection is stopped so it can't sit in
+    // WithOrbitMeshDefaults()'s endless reconnect loop (each attempt would be aborted again by the
+    // Server) while the REST enrollment path takes over.
+    private async Task<bool> TryConnectAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            await _connection!.StartAsync(cancellationToken);
+            if (await RegisterAsync())
+            {
+                return true;
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogWarning(ex, "Unable to connect to the OrbitMesh server");
+        }
+
+        try
+        {
+            await _connection!.StopAsync(CancellationToken.None);
+        }
+        catch (Exception ex)
+        {
+            logger.LogDebug(ex, "Error while stopping the connection after a failed connect");
+        }
+        return false;
+    }
+
     private async Task EnrollAndPollAsync(CancellationToken cancellationToken)
     {
         var client = httpClientFactory.CreateClient(nameof(EdgeManager));
         var baseUri = _options.OrbitMeshServerUri.TrimEnd('/');
         var request = new EnrollRequest(_description.EdgeName, _description.InstanceId, _description.MachineName, _description.OSVersion, _description.OSCaption, _description.Platform);
+        var secret = EnrollSecretProvider.GetOrCreate(_workingDirectory);
         var enrolled = false;
         string? lastLoggedStatus = null;
+        string? lastError = null;
+        var lastConnectAttemptUtc = DateTime.UtcNow;
 
         while (!cancellationToken.IsCancellationRequested)
         {
@@ -151,14 +177,28 @@ public sealed class EdgeManager(IOptions<EdgeOptions> optionsAccessor, ILogger<E
                 EnrollStatusResponse? response;
                 if (enrolled)
                 {
-                    response = await client.GetFromJsonAsync<EnrollStatusResponse>($"{baseUri}/rest/enroll/{_instanceId}/status", cancellationToken);
+                    using var statusRequest = new HttpRequestMessage(HttpMethod.Get, $"{baseUri}/rest/enroll/{_instanceId}/status");
+                    statusRequest.Headers.Add(OrbitMeshHeaderNames.EnrollSecret, secret);
+                    using var statusResponse = await client.SendAsync(statusRequest, cancellationToken);
+                    statusResponse.EnsureSuccessStatusCode();
+                    response = await statusResponse.Content.ReadFromJsonAsync<EnrollStatusResponse>(cancellationToken);
+                    // The server forgot us (restart, expiry, dismissed by an admin) - enroll again
+                    // rather than polling an entry that no longer exists forever.
+                    if (response?.Status == EnrollmentStatus.Unknown)
+                    {
+                        enrolled = false;
+                    }
                 }
                 else
                 {
-                    using var postResponse = await client.PostAsJsonAsync($"{baseUri}/rest/enroll", request, cancellationToken);
+                    using var enrollRequest = new HttpRequestMessage(HttpMethod.Post, $"{baseUri}/rest/enroll") { Content = JsonContent.Create(request) };
+                    enrollRequest.Headers.Add(OrbitMeshHeaderNames.EnrollSecret, secret);
+                    using var postResponse = await client.SendAsync(enrollRequest, cancellationToken);
+                    postResponse.EnsureSuccessStatusCode();
                     response = await postResponse.Content.ReadFromJsonAsync<EnrollStatusResponse>(cancellationToken);
                     enrolled = true;
                 }
+                lastError = null;
 
                 if (response?.Status != lastLoggedStatus)
                 {
@@ -166,15 +206,45 @@ public sealed class EdgeManager(IOptions<EdgeOptions> optionsAccessor, ILogger<E
                     lastLoggedStatus = response?.Status;
                 }
 
+                var alreadyApplied = false;
                 if (response is { Status: EnrollmentStatus.Approved, AccessKey: { Length: > 0 } accessKey })
                 {
-                    await HandleApprovedAccessKeyAsync(accessKey);
-                    return;
+                    // The Server keeps an approved entry for a few minutes until the Edge connects for
+                    // real. If what it hands out is already what this process started with, restarting
+                    // again would loop forever - the connection is failing for some other reason.
+                    alreadyApplied = accessKey == _options.OrbitMeshAccessKey
+                        && (string.IsNullOrEmpty(response.EdgeName) || response.EdgeName == _edgeName);
+                    if (!alreadyApplied)
+                    {
+                        await HandleApprovedAccessKeyAsync(accessKey, response.EdgeName);
+                        return;
+                    }
+                }
+
+                // "Rejected" = the Server already has an Edge configured for this InstanceId, and an
+                // already-applied approval means the same: the original connect failure was likely
+                // transient (e.g. the server was down at boot) rather than a missing approval - try the
+                // normal connection again (throttled, in case the AccessKey or name on disk really is
+                // wrong and every attempt will just be aborted).
+                if ((response?.Status == EnrollmentStatus.Rejected || alreadyApplied) && DateTime.UtcNow - lastConnectAttemptUtc > TimeSpan.FromSeconds(30))
+                {
+                    lastConnectAttemptUtc = DateTime.UtcNow;
+                    if (await TryConnectAsync(cancellationToken))
+                    {
+                        logger.LogInformation("Connected to the OrbitMesh server - enrollment no longer needed.");
+                        return;
+                    }
                 }
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                logger.LogDebug(ex, "Enrollment poll failed - will retry");
+                // Logged once per distinct failure (not every 5s) so a down server or a refused
+                // enrollment is visible without flooding the log.
+                if (ex.Message != lastError)
+                {
+                    logger.LogWarning(ex, "Enrollment request failed - will keep retrying");
+                    lastError = ex.Message;
+                }
             }
 
             try
@@ -229,11 +299,11 @@ public sealed class EdgeManager(IOptions<EdgeOptions> optionsAccessor, ILogger<E
 
     // Fired once rest/enroll polling (EnrollAndPollAsync) sees an admin approve this Edge from the
     // Console's pending-edges list.
-    private async Task HandleApprovedAccessKeyAsync(string accessKey)
+    private async Task HandleApprovedAccessKeyAsync(string accessKey, string? approvedEdgeName)
     {
         try
         {
-            ApplyApprovedAccessKey(accessKey);
+            ApplyApprovedAccessKey(accessKey, approvedEdgeName);
         }
         catch (Exception ex)
         {
@@ -245,7 +315,9 @@ public sealed class EdgeManager(IOptions<EdgeOptions> optionsAccessor, ILogger<E
         await RestartSelfAsync();
     }
 
-    private void ApplyApprovedAccessKey(string accessKey)
+    // approvedEdgeName: the admin may have approved this Edge under a different name than the one it
+    // declared, and its credential is bound to that name - so it has to be adopted along with the key.
+    private void ApplyApprovedAccessKey(string accessKey, string? approvedEdgeName)
     {
         var path = Path.Combine(_workingDirectory, "appsettings.json");
         var root = JsonNode.Parse(File.ReadAllText(path))
@@ -255,6 +327,10 @@ public sealed class EdgeManager(IOptions<EdgeOptions> optionsAccessor, ILogger<E
             throw new InvalidOperationException($"{path} has no \"Edge\" section to update.");
         }
         edgeSection["OrbitMeshAccessKey"] = accessKey;
+        if (!string.IsNullOrEmpty(approvedEdgeName))
+        {
+            edgeSection["EdgeName"] = approvedEdgeName;
+        }
         File.WriteAllText(path, root.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
     }
 
@@ -297,14 +373,23 @@ public sealed class EdgeManager(IOptions<EdgeOptions> optionsAccessor, ILogger<E
             // wait for this PID to exit, then let the service manager start the unit itself.
             if (WindowsServiceHelpers.IsWindowsService())
             {
+                // The values travel as environment variables, not as trailing "-Name value" arguments:
+                // with `powershell -Command <script>`, everything after the script text is appended to
+                // the command itself instead of being bound to a param() block, so the previous
+                // $ProcessId/$ServiceName were always null (the wait loop ended immediately) and the
+                // service name was injectable into the command line.
                 return TryStartServiceManagerWatcher("powershell.exe",
-                    "-NoProfile", "-Command",
-                    "param($ProcessId,$ServiceName) while (Get-Process -Id $ProcessId -ErrorAction SilentlyContinue) { Start-Sleep -Milliseconds 500 }; sc.exe start $ServiceName",
-                    "-ProcessId", Environment.ProcessId.ToString(), "-ServiceName", RequireServiceOrUnitName());
+                    new Dictionary<string, string>
+                    {
+                        ["ORBITMESH_WATCH_PID"] = Environment.ProcessId.ToString(),
+                        ["ORBITMESH_WATCH_NAME"] = RequireServiceOrUnitName()
+                    },
+                    "-NoProfile", "-NonInteractive", "-Command",
+                    "$p = [int]$env:ORBITMESH_WATCH_PID; while (Get-Process -Id $p -ErrorAction SilentlyContinue) { Start-Sleep -Milliseconds 500 }; sc.exe start $env:ORBITMESH_WATCH_NAME");
             }
             if (SystemdHelpers.IsSystemdService())
             {
-                return TryStartServiceManagerWatcher("bash", "-c",
+                return TryStartServiceManagerWatcher("bash", null, "-c",
                     "while kill -0 \"$1\" 2>/dev/null; do sleep 0.5; done; sudo systemctl start \"$2\"",
                     "bash", Environment.ProcessId.ToString(), RequireServiceOrUnitName());
             }
@@ -334,14 +419,29 @@ public sealed class EdgeManager(IOptions<EdgeOptions> optionsAccessor, ILogger<E
         }
     }
 
-    private string RequireServiceOrUnitName() =>
-        _options.UpdateOptions.ServiceOrUnitName ?? throw new InvalidOperationException("UpdateOptions.ServiceOrUnitName must be set to restart under a service manager.");
+    // Must not start with '-' (would parse as an option to systemctl/sc.exe).
+    private static readonly System.Text.RegularExpressions.Regex ServiceOrUnitNamePattern = new(@"^[A-Za-z0-9_.@][A-Za-z0-9_.@ -]*$", System.Text.RegularExpressions.RegexOptions.Compiled);
+
+    private string RequireServiceOrUnitName()
+    {
+        var name = _options.UpdateOptions.ServiceOrUnitName ?? throw new InvalidOperationException("UpdateOptions.ServiceOrUnitName must be set to restart under a service manager.");
+        return ServiceOrUnitNamePattern.IsMatch(name)
+            ? name
+            : throw new InvalidOperationException("UpdateOptions.ServiceOrUnitName contains characters that aren't valid in a service/unit name.");
+    }
 
     // args are passed as real argv entries (not interpolated into the script string), so a
     // service/unit name never needs shell-escaping.
-    private static bool TryStartServiceManagerWatcher(string executable, params string[] args)
+    private static bool TryStartServiceManagerWatcher(string executable, IReadOnlyDictionary<string, string>? environment, params string[] args)
     {
         var startInfo = new ProcessStartInfo(executable) { UseShellExecute = false, CreateNoWindow = true };
+        if (environment != null)
+        {
+            foreach (var (key, value) in environment)
+            {
+                startInfo.Environment[key] = value;
+            }
+        }
         foreach (var arg in args)
         {
             startInfo.ArgumentList.Add(arg);
@@ -350,17 +450,18 @@ public sealed class EdgeManager(IOptions<EdgeOptions> optionsAccessor, ILogger<E
         return true;
     }
 
-    private async Task RegisterAsync()
+    // Returns whether the Server accepted the registration. A false is no longer retried here: the
+    // Server aborts unauthorized connections outright, so a refusal means the credential isn't
+    // accepted and REST enrollment (EnrollAndPollAsync) is the retry path.
+    private async Task<bool> RegisterAsync()
     {
         try
         {
             var registered = await _connection!.InvokeAsync<bool>(EdgeServerMethodNames.RegisterEdge, _description);
             if (!registered)
             {
-                logger.LogWarning("Edge registration failed, retrying in 3 seconds...");
-                await Task.Delay(3000);
-                await RegisterAsync();
-                return;
+                logger.LogWarning("Edge registration was refused by the server");
+                return false;
             }
             logger.LogInformation("Edge '{Name}' registered", _edgeName);
             lock (_lock)
@@ -370,10 +471,12 @@ public sealed class EdgeManager(IOptions<EdgeOptions> optionsAccessor, ILogger<E
                     _ = _connection!.InvokeAsync(EdgeServerMethodNames.ReportPackageState, instance.Package, instance.State);
                 }
             }
+            return true;
         }
         catch (Exception ex)
         {
             logger.LogError(ex, "Unable to register the edge");
+            return false;
         }
     }
 

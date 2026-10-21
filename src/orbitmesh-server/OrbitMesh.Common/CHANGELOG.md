@@ -4,6 +4,20 @@ Format: [Keep a Changelog](https://keepachangelog.com/). Versions match `<Versio
 `OrbitMesh.Common.csproj`, which is what gets published to
 [nuget.org](https://www.nuget.org/packages/OrbitMesh.Common).
 
+## [1.2.5]
+
+### Added
+
+- `OrbitMeshHeaderNames.EnrollSecret` - header carrying the per-Edge poll secret on `rest/enroll`
+  calls (the Server stores only its hash).
+- `EnrollStatusResponse.EdgeName` - the name an admin approved a pending Edge under, which the Edge
+  adopts together with its new AccessKey (the credential is bound to that name, not to the one the
+  Edge declared).
+
+### Changed
+
+- `Microsoft.AspNetCore.SignalR.Client` and `Microsoft.Extensions.Http` bumped to 10.0.13.
+
 ## [1.2.4]
 
 ### Added

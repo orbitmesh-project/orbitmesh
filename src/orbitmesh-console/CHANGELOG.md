@@ -3,6 +3,20 @@
 Format: [Keep a Changelog](https://keepachangelog.com/). Versions match the `VERSION` file at
 the root of this project, bumped by `cicd/release-static-site.ps1`.
 
+## [1.2.16]
+
+### Security
+
+- Every value interpolated into a Management API path (`management-api.js`) is now URL-encoded. A
+  pending Edge's InstanceId is self-declared by an unauthenticated caller; an id like
+  `../../credentials/admin` was normalized by the browser into `DELETE /rest/management/credentials/admin`
+  when an admin clicked Dismiss, sent with the admin's own AccessKey.
+
+### Changed
+
+- The pending-edges table shows each Edge's machine name and platform, and warns that every column is
+  self-declared.
+
 ## [1.2.15]
 
 ### Changed
