@@ -188,10 +188,13 @@ public sealed class EdgeManager(IOptions<EdgeOptions> optionsAccessor, ILogger<E
         var enrolled = false;
         string? lastLoggedStatus = null;
         string? lastError = null;
-        var lastConnectAttemptUtc = DateTime.UtcNow;
+        // Backdated so the first retry comes ~10s after the fallback (a Server that was merely still
+        // starting, e.g. both services booting together), then once a minute.
+        var lastConnectAttemptUtc = DateTime.UtcNow - TimeSpan.FromSeconds(50);
 
         while (!cancellationToken.IsCancellationRequested)
         {
+            var pollDelay = TimeSpan.FromSeconds(5);
             try
             {
                 EnrollStatusResponse? response;
@@ -216,13 +219,27 @@ public sealed class EdgeManager(IOptions<EdgeOptions> optionsAccessor, ILogger<E
                     using var postResponse = await client.SendAsync(enrollRequest, cancellationToken);
                     postResponse.EnsureSuccessStatusCode();
                     response = await postResponse.Content.ReadFromJsonAsync<EnrollStatusResponse>(cancellationToken);
-                    enrolled = true;
+                    // A rejected enrollment records nothing server-side, so there's no entry to poll.
+                    enrolled = response?.Status != EnrollmentStatus.Rejected;
                 }
                 lastError = null;
 
+                if (response?.Status == EnrollmentStatus.Rejected)
+                {
+                    // Not an enrollment at all: the Server already has an Edge with this InstanceId or name.
+                    pollDelay = TimeSpan.FromSeconds(15);
+                }
+
                 if (response?.Status != lastLoggedStatus)
                 {
-                    logger.LogInformation("Enrollment status: {Status}", response?.Status ?? "?");
+                    if (response?.Status == EnrollmentStatus.Rejected)
+                    {
+                        logger.LogWarning("The server already has an Edge configured for this InstanceId/name, so this isn't a new enrollment - retrying the normal connection. If this persists, check Edge:OrbitMeshAccessKey (and give a different machine another Edge:EdgeName).");
+                    }
+                    else
+                    {
+                        logger.LogInformation("Enrollment status: {Status}", response?.Status ?? "?");
+                    }
                     lastLoggedStatus = response?.Status;
                 }
 
@@ -270,7 +287,7 @@ public sealed class EdgeManager(IOptions<EdgeOptions> optionsAccessor, ILogger<E
 
             try
             {
-                await Task.Delay(TimeSpan.FromSeconds(5), cancellationToken);
+                await Task.Delay(pollDelay, cancellationToken);
             }
             catch (OperationCanceledException)
             {

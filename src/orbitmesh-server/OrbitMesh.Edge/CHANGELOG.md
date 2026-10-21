@@ -4,6 +4,19 @@ Format: [Keep a Changelog](https://keepachangelog.com/). Versions match `<Versio
 `OrbitMesh.Edge.csproj`, which is what's reported to the update server (see
 `Services/EdgeSelfUpdater.cs` and `Services/EdgeUpdateCheckService.cs`).
 
+## [1.1.9]
+
+### Fixed
+
+- An Edge whose process starts while the Server isn't reachable yet (both services booting together, or
+  the Server restarting for an update) now returns to its normal connection within ~10-15s of the Server
+  coming back, instead of waiting for the server's `rejected` answer and then a full minute. The first
+  retry is backdated to ~10s after the fallback; later ones stay at one a minute (the Server counts each
+  failed connect toward its lockout). While the Server answers `rejected` the Edge polls every 15s instead
+  of 5s and logs one explicit warning instead of alternating `unknown`/`rejected` status lines.
+- Needs OrbitMesh.Server 1.2.22 or later to avoid being recorded as a new pending Edge when it was
+  configured by hand; with an older Server it still recovers, but shows up under Pending edges meanwhile.
+
 ## [1.1.8]
 
 ### Security

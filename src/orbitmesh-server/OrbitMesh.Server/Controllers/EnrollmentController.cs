@@ -50,6 +50,20 @@ public sealed class EnrollmentController(IPendingEdgeRegistry pendingEdgeRegistr
             return new EnrollStatusResponse(EnrollmentStatus.Rejected, null);
         }
 
+        // An Edge configured by hand has no InstanceId on file (only approval from the pending list records
+        // one), so the check above can't recognise it - and an Edge that merely failed to connect (the Server
+        // was still starting, restarting for an update, ...) would then show up as a brand-new pending Edge
+        // and never be told to retry its real connection. The name is the other identity the Server knows:
+        // approval refuses an already-used name anyway, so refusing to record one loses nothing.
+        var declaredName = request.EdgeName.Trim();
+        if (directory.Current.Edges.Any(e => e.Name.Equals(declaredName, StringComparison.OrdinalIgnoreCase)))
+        {
+            logger.LogWarning(
+                "Enrollment from InstanceId={InstanceId} not recorded: an Edge named '{EdgeName}' is already configured. If this is that Edge, its connection is failing (it will keep retrying); if it's a different machine, give it another Edge:EdgeName.",
+                instanceId, declaredName.ForLog());
+            return new EnrollStatusResponse(EnrollmentStatus.Rejected, null);
+        }
+
         var remoteIp = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "?";
         var edgeName = Truncate(request.EdgeName.Trim(), MaxEdgeNameLength);
         var result = pendingEdgeRegistry.Enroll(instanceId, edgeName, Truncate(request.MachineName, MaxMachineNameLength), Truncate(request.Platform, MaxPlatformLength), remoteIp, secretHash);

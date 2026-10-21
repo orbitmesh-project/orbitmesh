@@ -4,6 +4,21 @@ Format: [Keep a Changelog](https://keepachangelog.com/). Versions match `<Versio
 `OrbitMesh.Server.csproj`, which is what's reported to the update server (see
 `Services/ServerSelfUpdater.cs` and `Services/UpdateCheckService.cs`).
 
+## [1.2.22]
+
+### Fixed
+
+- An Edge configured by hand (no `InstanceId` on file - only approval from the pending list records one)
+  that failed to connect when its process started - typically because the Server was still starting or
+  restarting for an update - showed up in **Pending edges** as a brand-new Edge next to its own,
+  disconnected, entry, and was never told to retry its real connection, so it stayed disconnected until
+  restarted. `POST rest/enroll` now also answers `rejected` (recording nothing) when the declared Edge name
+  is already configured, which makes the Edge retry its normal connection. Approval already refused an
+  existing name, so no legitimate enrollment is lost; a different machine that reuses an existing name just
+  needs another `Edge:EdgeName`.
+- A stuck pending entry like that expires on its own (15 minutes after the Edge stops polling) or can be
+  dismissed from the Console.
+
 ## [1.2.21]
 
 Security review follow-up, part 2 (the design decisions).
