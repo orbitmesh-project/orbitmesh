@@ -18,8 +18,7 @@ public sealed class RequiresScopeAttribute(params string[] anyOf) : Attribute, I
     public async Task OnActionExecutionAsync(ActionExecutingContext context, ActionExecutionDelegate next)
     {
         var directory = context.HttpContext.RequestServices.GetRequiredService<IOrbitMeshDirectory>();
-        var accessKey = context.HttpContext.Request.GetHeaderOrQuery(OrbitMeshHeaderNames.AccessKey);
-        var credential = directory.FindCredential(accessKey);
+        var credential = directory.FindCredential(context.HttpContext.GetEffectiveAccessKey());
         if (credential == null || !anyOf.Any(credential.Scopes.Contains))
         {
             context.Result = new ObjectResult($"Forbidden: this action requires the '{string.Join("' or '", anyOf)}' scope.")

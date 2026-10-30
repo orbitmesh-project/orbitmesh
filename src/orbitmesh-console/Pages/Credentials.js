@@ -1,6 +1,5 @@
 import { store } from "../Scripts/store.js";
 import * as api from "../Scripts/management-api.js";
-import { computeAccessKey, updateAccessKeyCookie } from "../Scripts/auth.js";
 import Modal from "../Scripts/Modal.js";
 
 const emptyCredential = () => ({ Name: "", AccessKey: "", Kind: "Machine", Enable: true, Scopes: [] });
@@ -93,17 +92,8 @@ export default {
         }
     },
     methods: {
-        // afterSave runs right after the POST succeeds but before the refresh below - the one place
-        // saveCredential() can safely swap the session over to a just-reset password (see there): the
-        // POST itself still authenticates with the OLD key (correct - the server hasn't changed yet),
-        // and the refresh needs the NEW one (correct - the server just did). Doing the swap any earlier
-        // risks a client/server mismatch if the POST itself fails for an unrelated reason (rate limit,
-        // network) - the local session would claim a password the server never actually accepted.
-        async upsert(credential, afterSave) {
+        async upsert(credential) {
             await api.upsertCredential(credential.Name, credential.AccessKey, credential.Kind, credential.Enable, credential.Scopes);
-            if (afterSave) {
-                afterSave();
-            }
             // GetCredentials reads IOptionsMonitor's CurrentValue, which only catches up with the write
             // above once its file-watcher reload fires - an immediate reload can race and read stale
             // data (same class of bug fixed for the package deploy flow in Packages.js).
@@ -182,31 +172,20 @@ export default {
                 // Whichever raw secret is about to be sent (Machine key or Human's new password) has to
                 // be captured here, before upsert() clears/hashes it - it's the only moment it exists.
                 let revealed = null;
-                let afterSave = null;
                 if (this.editResetKey && this.editCredential.Kind === "Human") {
                     if (!this.editNewPassword) {
                         store.notify("Enter a new password first.", "error");
                         return;
                     }
                     revealed = { label: "New password", value: this.editNewPassword };
-                    this.editCredential.AccessKey = await computeAccessKey(this.editCredential.Name, this.editNewPassword);
-                    if (this.editCredential.Name === store.username) {
-                        // Resetting the signed-in admin's OWN password: the server now only accepts the
-                        // new hash, so the session cookie/REST client have to be swapped over to match -
-                        // but only once the save itself has actually succeeded (see upsert()'s afterSave
-                        // param), or every Management API request after a failed save keeps 403ing with
-                        // a local session claiming a password the server never actually accepted.
-                        const newAccessKey = this.editCredential.AccessKey;
-                        afterSave = () => {
-                            updateAccessKeyCookie(newAccessKey);
-                            api.updateAccessKey(newAccessKey);
-                            store.accessKey = newAccessKey;
-                        };
-                    }
+                    // Sent as typed (over the same connection as everything else): the server keeps only a
+                    // salted hash of it, and signs this account's other sessions out - not this one, so
+                    // resetting your own password doesn't log you out.
+                    this.editCredential.AccessKey = this.editNewPassword;
                 } else if (this.editCredential.Kind === "Machine" && this.editCredential.AccessKey) {
                     revealed = { label: "Access Key", value: this.editCredential.AccessKey };
                 }
-                await this.upsert(this.editCredential, afterSave);
+                await this.upsert(this.editCredential);
                 this.expanded = null;
                 this.editResetKey = false;
                 this.editNewPassword = "";
@@ -236,9 +215,8 @@ export default {
                         store.notify("Password is required.", "error");
                         return;
                     }
-                    // Same derivation login() uses to authenticate - the credential's Name doubles as
-                    // its login here.
-                    this.newCredential.AccessKey = await computeAccessKey(this.newCredential.Name, this.newCredentialPassword);
+                    // The credential's Name doubles as its login; the server hashes the password.
+                    this.newCredential.AccessKey = this.newCredentialPassword;
                 } else {
                     if (!this.newCredential.AccessKey) {
                         store.notify("Access Key is required (or use Generate).", "error");

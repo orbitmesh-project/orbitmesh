@@ -1,7 +1,7 @@
 import { router } from "./router.js";
 import { store } from "./store.js";
 import * as managementApi from "./management-api.js";
-import { isLoggedIn as cookieIsLoggedIn } from "./auth.js";
+import { fetchSession } from "./auth.js";
 import Toast from "./Toast.js";
 import ConfirmDialog from "./ConfirmDialog.js";
 
@@ -108,18 +108,18 @@ const App = {
 };
 
 const app = createApp(App);
+
+// A page reload with a still-valid session should reconnect automatically instead of bouncing through
+// the sign-in form again. The session cookie is HttpOnly, so only the server can say whether there is one:
+// ask it before the router makes its first navigation (whose guard reads store.isLoggedIn), then open the
+// SignalR connections to match.
+await store.restoreSession();
+
 app.use(router);
 app.mount("#app");
 
-// A page reload with valid auth cookies should reconnect automatically instead of bouncing through
-// the login form again - store.isLoggedIn already reflects the cookies (see store.js's initial
-// state), so this just needs to open the SignalR connections to match.
-if (store.isLoggedIn) {
-    store.connect();
-}
-
 // store.isLoggedIn otherwise only ever changes on an explicit signIn()/logout() call - it does not
-// react on its own to the AccessKey cookie actually expiring, or to the server rejecting it (access
+// react on its own to the session actually expiring, or to the server rejecting it (access
 // revoked, password changed elsewhere). Without this, a user sitting on a page with no navigation
 // event to trigger the router guard would be left staring at a "logged in" shell that can't load or
 // save anything, instead of being bounced to /login.
@@ -134,15 +134,23 @@ function forceLogout(message) {
 
 managementApi.setUnauthorizedHandler(() => forceLogout("Your session has expired. Please log in again."));
 
-function checkCookieStillValid() {
-    if (store.isLoggedIn && !cookieIsLoggedIn()) {
+// Every minute (and when the tab comes back to the foreground) ask the server whether the session is
+// still good. This both notices a session that was revoked, expired or lost in a server restart, and counts
+// as activity - it's what keeps an open Console from idling out. null means "no session"; undefined means
+// the server couldn't be reached, which the SignalR reconnect logic already shows and is not a sign-out.
+async function checkSessionStillValid() {
+    if (!store.isLoggedIn) {
+        return;
+    }
+    const session = await fetchSession(store.orbitmeshServerUri);
+    if (session === null) {
         forceLogout("Your session has expired. Please log in again.");
     }
 }
 
-setInterval(checkCookieStillValid, 15000);
+setInterval(checkSessionStillValid, 60000);
 document.addEventListener("visibilitychange", () => {
     if (!document.hidden) {
-        checkCookieStillValid();
+        checkSessionStillValid();
     }
 });

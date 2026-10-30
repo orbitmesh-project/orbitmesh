@@ -4,6 +4,51 @@ Format: [Keep a Changelog](https://keepachangelog.com/). Versions match `<Versio
 `OrbitMesh.Server.csproj`, which is what's reported to the update server (see
 `Services/ServerSelfUpdater.cs` and `Services/UpdateCheckService.cs`).
 
+## [1.3.0]
+
+Console sign-in reworked: server-side sessions instead of a replayable key, and single sign-on through an
+OpenID Connect provider such as Authelia.
+
+### Added
+
+- **Sessions.** `POST rest/auth/login` (name + password) starts a session: an opaque token in an
+  `HttpOnly`, `SameSite=Strict` cookie, of which only the SHA-256 is kept (`keys/sessions.json`, so a restart
+  doesn't sign everybody out). It expires after `Auth:SessionIdleMinutes` (30) of inactivity and
+  `Auth:SessionMaxHours` (24) at the most, and ends on `POST rest/auth/logout`, when the account is disabled
+  or removed, or when its password is reset (the session doing the reset is spared). `GET rest/auth/me`
+  returns who the cookie belongs to and what it may do; `GET rest/auth/config` tells the sign-in page which
+  methods are on. The session works for the Console's Management REST, `ControlHub` and `ConsumerHub`
+  connections only, never to pose as an Edge or a package.
+- **Single sign-on (OpenID Connect)** under `OrbitMesh:Auth:Oidc`: authorization-code flow with PKCE, the
+  Server being a confidential client. The provider's groups are mapped to scopes by `RoleMappings` (read
+  live); a user in no mapped group is refused. Signed-in users are named `oidc:<login>` (a prefix local
+  credentials may no longer use). Tested against a stand-in provider; Authelia's own configuration is in the
+  Access control guide. Needs a restart to change the provider settings. `Auth:LocalLoginEnabled` can turn the
+  password form off.
+- With single sign-on configured, first-run `setup/create-admin` is closed: the groups decide who administers.
+
+### Changed
+
+- **Human credentials hash the password itself** (PBKDF2-SHA256, 600,000 iterations, only ever run at
+  sign-in) instead of a client-computed SHA-1 that doubled as the bearer key. An account created by an
+  earlier version still signs in, and its hash is upgraded at that first sign-in - after which the old derived
+  key is no longer accepted as an AccessKey. A script that used a Human account's key must use a Machine
+  credential. `setup/create-admin` takes `Password` (the old `AccessKey` form is still accepted).
+- **A verified AccessKey is remembered** (by hash, in memory) until the configuration reloads, and the
+  credential it belongs to is resolved once per request, instead of an AES decrypt / PBKDF2 per credential on
+  every REST call and every hub method.
+- A request that presents no AccessKey at all (e.g. a Console whose session just expired, retrying) no longer
+  counts toward the per-IP failed-attempt lockout; only an actual wrong key does.
+- `GET configuration` masks `auth.oidc.clientSecret`; changing or removing an OIDC role mapping follows the
+  same delegation rule as credentials, and the configuration editor refuses a change that would remove the
+  caller's own `configuration:write`, for single-sign-on callers too.
+
+### Compatibility
+
+- Update the Console together with the Server (Console 1.3.0): an older Console signs in with the old derived
+  key, which keeps working only until the account's first sign-in with a new Console.
+- Edges, packages and dashboards (kiosk, ...) are unaffected: they present their AccessKey as before.
+
 ## [1.2.22]
 
 ### Fixed

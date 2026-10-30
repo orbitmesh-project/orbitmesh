@@ -1,3 +1,6 @@
+using System.Collections.Concurrent;
+using System.Security.Cryptography;
+using System.Text;
 using OrbitMesh.Server.Configuration;
 using Microsoft.Extensions.Options;
 
@@ -34,17 +37,45 @@ public interface IOrbitMeshDirectory
     /// <summary>Resolves an AccessKey back to its credential name, for logging/audit purposes only.</summary>
     string? GetCredentialName(string? accessKey);
 
-    /// <summary>Resolves an AccessKey back to its credential, for scope checks (see
-    /// Services.RequiresScopeAttribute and Hubs.ControlHub).</summary>
+    /// <summary>Resolves an AccessKey (or a session's pseudo key, see CallerKeys) back to its enabled
+    /// credential, for scope checks (see Services.RequiresScopeAttribute and Hubs.ControlHub). A single-sign-on
+    /// session resolves to a synthetic credential carrying the scopes its groups map to.</summary>
     CredentialOptions? FindCredential(string? accessKey);
+
+    /// <summary>The identity provider's groups for a single-sign-on session, null for any other caller.</summary>
+    IReadOnlyList<string>? GetFederatedGroups(string? accessKey);
 
     List<string> GetPackageNames();
 
     List<PackageDescription> GetPackagesList(string edgeName, bool includeAccessKey = false);
 }
 
-public sealed class OrbitMeshDirectory(IOptionsMonitor<OrbitMeshOptions> options, AccessKeyCipher cipher, SagaRegistry sagaRegistry) : IOrbitMeshDirectory
+public sealed class OrbitMeshDirectory : IOrbitMeshDirectory
 {
+    private readonly IOptionsMonitor<OrbitMeshOptions> options;
+    private readonly AccessKeyCipher cipher;
+    private readonly SagaRegistry sagaRegistry;
+    private readonly SessionStore sessions;
+
+    // SHA-256 of a presented AccessKey -> name of the credential it verified against. Checking a key means
+    // an AES decrypt per Machine credential and a PBKDF2 per legacy Human one, and the same key is checked
+    // many times a second (every REST call, every hub method); remembering the outcome makes that one
+    // dictionary lookup. Only successes are kept (so an attacker can't grow it), the credential is then
+    // re-read from the live config on every use (so disabling it, or changing its scopes, applies at once),
+    // and the whole thing is dropped whenever the configuration reloads (so a changed or removed key stops
+    // working at once too).
+    private readonly ConcurrentDictionary<string, string> verifiedKeys = new();
+    private const int MaxVerifiedKeys = 1024;
+
+    public OrbitMeshDirectory(IOptionsMonitor<OrbitMeshOptions> options, AccessKeyCipher cipher, SagaRegistry sagaRegistry, SessionStore sessions)
+    {
+        this.options = options;
+        this.cipher = cipher;
+        this.sagaRegistry = sagaRegistry;
+        this.sessions = sessions;
+        options.OnChange(_ => verifiedKeys.Clear());
+    }
+
     public OrbitMeshOptions Current => options.CurrentValue;
 
     public string GetPackageInstanceId(string edgeName, string packageName) => $"{edgeName}/{packageName}";
@@ -57,17 +88,29 @@ public sealed class OrbitMeshDirectory(IOptionsMonitor<OrbitMeshOptions> options
         }
 
         var config = Current;
+        var caller = ResolveEnabled(accessKey);
+        if (caller == null)
+        {
+            return false;
+        }
 
         if (edgeName.Equals(OrbitMeshDefaultNames.ConsumerEdgeName, StringComparison.OrdinalIgnoreCase)
             || (edgeName.Equals(OrbitMeshDefaultNames.ControllerEdgeName, StringComparison.OrdinalIgnoreCase) && accessType == OrbitMeshAccessType.Controller)
             || (edgeName.Equals(OrbitMeshDefaultNames.ManagementEdgeName, StringComparison.OrdinalIgnoreCase) && accessType == OrbitMeshAccessType.Management))
         {
-            return config.Credentials.Any(c => CanAccess(c, accessType) && MatchesAccessKey(c, accessKey));
+            return CanAccess(caller, accessType);
+        }
+
+        // A signed-in person's session is only good for the Console's own connections above - never for
+        // posing as an Edge, a package or the developer edge.
+        if (CallerKeys.IsSessionKey(accessKey))
+        {
+            return false;
         }
 
         if (edgeName.Equals(OrbitMeshDefaultNames.DeveloperEdgeName, StringComparison.OrdinalIgnoreCase))
         {
-            return config.Credentials.Any(c => CanAccess(c, accessType) && c.Scopes.Contains(OrbitMeshScope.Developer) && MatchesAccessKey(c, accessKey));
+            return CanAccess(caller, accessType) && caller.Scopes.Contains(OrbitMeshScope.Developer);
         }
 
         var edge = config.Edges.FirstOrDefault(s => s.Name.Equals(edgeName, StringComparison.OrdinalIgnoreCase));
@@ -76,6 +119,7 @@ public sealed class OrbitMeshDirectory(IOptionsMonitor<OrbitMeshOptions> options
             return false;
         }
 
+        var expectedCredential = edge.Credential;
         if (!packageName.Equals(OrbitMeshDefaultNames.EdgePackageName, StringComparison.OrdinalIgnoreCase))
         {
             var package = edge.Packages.FirstOrDefault(p => p.Name.Equals(packageName, StringComparison.OrdinalIgnoreCase));
@@ -85,15 +129,81 @@ public sealed class OrbitMeshDirectory(IOptionsMonitor<OrbitMeshOptions> options
             }
             if (!string.IsNullOrEmpty(package.Credential))
             {
-                return config.Credentials.Any(c => c.Name.Equals(package.Credential, StringComparison.OrdinalIgnoreCase) && CanAccess(c, accessType) && MatchesAccessKey(c, accessKey));
+                expectedCredential = package.Credential;
             }
         }
 
-        return config.Credentials.Any(c => c.Name.Equals(edge.Credential, StringComparison.OrdinalIgnoreCase) && CanAccess(c, accessType) && MatchesAccessKey(c, accessKey));
+        return caller.Name.Equals(expectedCredential, StringComparison.OrdinalIgnoreCase) && CanAccess(caller, accessType);
     }
 
-    // Human credentials verify against a PBKDF2 hash (AccessKeyHasher, one-way - nothing ever reads a
-    // Human credential's key back out). Machine credentials are AES-encrypted at rest (AccessKeyCipher,
+    // The credential an AccessKey (or session pseudo key) belongs to, if it is enabled. Everything below -
+    // access checks, scope checks, authorization rules - goes through here, so a key is verified once and
+    // then looked up.
+    private CredentialOptions? ResolveEnabled(string? accessKey)
+    {
+        if (string.IsNullOrEmpty(accessKey))
+        {
+            return null;
+        }
+        if (CallerKeys.IsSessionKey(accessKey))
+        {
+            return sessions.TryGetById(CallerKeys.SessionIdOf(accessKey)) is { } session ? CredentialForSession(session) : null;
+        }
+
+        var cacheKey = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(accessKey)));
+        if (verifiedKeys.TryGetValue(cacheKey, out var name))
+        {
+            var cached = Current.Credentials.FirstOrDefault(c => c.Enable && c.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
+            if (cached != null)
+            {
+                return cached;
+            }
+            verifiedKeys.TryRemove(cacheKey, out _);
+        }
+
+        var found = Current.Credentials.FirstOrDefault(c => c.Enable && MatchesAccessKey(c, accessKey));
+        if (found != null)
+        {
+            if (verifiedKeys.Count >= MaxVerifiedKeys)
+            {
+                verifiedKeys.Clear();
+            }
+            verifiedKeys[cacheKey] = found.Name;
+        }
+        return found;
+    }
+
+    private CredentialOptions? CredentialForSession(SessionInfo session)
+    {
+        if (!session.IsFederated)
+        {
+            // A password session is just a proof of identity: what it may do is whatever the account holds
+            // right now, so disabling or editing the account takes effect on open sessions immediately.
+            return Current.Credentials.FirstOrDefault(c =>
+                c.Enable && c.Kind == CredentialKind.Human && c.Name.Equals(session.Name, StringComparison.OrdinalIgnoreCase));
+        }
+
+        var oidc = Current.Auth.Oidc;
+        if (!oidc.IsUsable)
+        {
+            return null;
+        }
+        var scopes = OidcRoleMapper.ScopesFor(oidc, session.Groups);
+        return scopes.Count == 0
+            ? null
+            : new CredentialOptions { Name = session.Name, AccessKey = string.Empty, Kind = CredentialKind.Human, Enable = true, Scopes = scopes };
+    }
+
+    public IReadOnlyList<string>? GetFederatedGroups(string? accessKey) =>
+        CallerKeys.IsSessionKey(accessKey) && sessions.TryGetById(CallerKeys.SessionIdOf(accessKey), touch: false) is { IsFederated: true } session
+            ? session.Groups
+            : null;
+
+    // A Human credential has no AccessKey to present any more: people sign in with a password and carry a
+    // session (see AuthController). Only a hash from before that (AccessKeyHasher, a PBKDF2 of the SHA-1 the
+    // old Console sent as its key) still verifies here, so an old Console or script keeps working until its
+    // account's first real sign-in upgrades the hash (PasswordHasher) - after which a Human credential matches
+    // no AccessKey at all. Machine credentials are AES-encrypted at rest (AccessKeyCipher,
     // reversible - the Server hands the key back out verbatim to Edges/packages, see
     // CredentialOptions.Kind), decrypted here for comparison; a legacy plaintext value (predating this
     // encryption, or hand-edited into appsettings.json) still compares directly so existing
@@ -212,7 +322,7 @@ public sealed class OrbitMeshDirectory(IOptionsMonitor<OrbitMeshOptions> options
     }
 
     private bool CheckAuthorization(string accessKey, Func<CredentialOptions, bool> predicate) =>
-        Current.Credentials.Any(c => MatchesAccessKey(c, accessKey) && c.Enable && predicate(c));
+        ResolveEnabled(accessKey) is { } credential && predicate(credential);
 
     public List<string> GetGroups(string edgeName, string packageName)
     {
@@ -267,8 +377,7 @@ public sealed class OrbitMeshDirectory(IOptionsMonitor<OrbitMeshOptions> options
 
     public string? GetCredentialName(string? accessKey) => FindCredential(accessKey)?.Name;
 
-    public CredentialOptions? FindCredential(string? accessKey) =>
-        string.IsNullOrEmpty(accessKey) ? null : Current.Credentials.FirstOrDefault(c => c.Enable && MatchesAccessKey(c, accessKey));
+    public CredentialOptions? FindCredential(string? accessKey) => ResolveEnabled(accessKey);
 
     public List<string> GetPackageNames() =>
         Current.Edges.SelectMany(s => s.Packages.Select(p => p.Name)).Distinct().ToList();

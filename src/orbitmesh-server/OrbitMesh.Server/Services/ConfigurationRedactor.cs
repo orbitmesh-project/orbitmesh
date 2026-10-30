@@ -7,7 +7,7 @@ namespace OrbitMesh.Server.Services;
 /// round-trips the whole "OrbitMesh" section, so masking has to be reversible or saving would overwrite
 /// every secret with its placeholder.
 /// <para>Covered: credential AccessKeys (PBKDF2 hashes / encrypted blobs - offline-crackable or
-/// reusable by whoever holds them), the update server token, NuGet feed API keys, secret variables, and
+/// reusable by whoever holds them), the update server token, the single-sign-on client secret, NuGet feed API keys, secret variables, and
 /// package settings whose manifest type is Password.</para></summary>
 public static class ConfigurationRedactor
 {
@@ -42,6 +42,10 @@ public static class ConfigurationRedactor
         var currentRoot = current as JsonObject;
 
         Apply(root, currentRoot, "updateOptions", "token", restore, unresolved, "updateOptions.token");
+        if (root["auth"] is JsonObject auth)
+        {
+            Apply(auth, (currentRoot?["auth"] as JsonObject), "oidc", "clientSecret", restore, unresolved, "auth.oidc.clientSecret");
+        }
 
         foreach (var (item, currentItem) in Pairs(root, currentRoot, "credentials", "name"))
         {

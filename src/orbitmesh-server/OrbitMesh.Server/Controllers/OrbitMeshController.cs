@@ -87,7 +87,8 @@ public sealed class OrbitMeshController(
         }
     }
 
-    private string? GetAccessKey() => GetHeader(OrbitMeshHeaderNames.AccessKey);
+    // Set by AccessKeyAuthenticationMiddleware: the presented AccessKey, or the Console's session.
+    private string? GetAccessKey() => HttpContext.GetEffectiveAccessKey();
 
     private string? GetHeader(string key) => Request.GetHeaderOrQuery(key);
 }

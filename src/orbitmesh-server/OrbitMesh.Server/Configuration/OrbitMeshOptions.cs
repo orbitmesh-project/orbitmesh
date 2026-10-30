@@ -38,6 +38,8 @@ public sealed class OrbitMeshOptions
 
     public RecoveryOptions RecoveryOptions { get; set; } = new();
 
+    public AuthOptions Auth { get; set; } = new();
+
     public List<CredentialOptions> Credentials { get; set; } = new();
 
     public List<EdgeOptions> Edges { get; set; } = new();
@@ -51,6 +53,73 @@ public sealed class OrbitMeshOptions
     // Empty by default - there's no fixed, stable public feed URL to ship as a baked-in default yet.
     // Ordered: when the same package id/version exists on more than one feed, the first one listed wins.
     public List<NuGetFeedOptions> NuGetFeeds { get; set; } = new();
+}
+
+/// <summary>How humans sign in to the Console: a username/password login (Human credentials) and/or
+/// single sign-on through an OpenID Connect provider such as Authelia. Machine credentials (Edges,
+/// packages, dashboards) are unaffected - they keep presenting their AccessKey.</summary>
+public sealed class AuthOptions
+{
+    /// <summary>False hides the password form and refuses POST rest/auth/login - only sensible once OIDC
+    /// works, since it also removes the break-glass account.</summary>
+    public bool LocalLoginEnabled { get; set; } = true;
+
+    /// <summary>A session unused for this long expires (any request, or the Console's keep-alive, counts as use).</summary>
+    public int SessionIdleMinutes { get; set; } = 30;
+
+    /// <summary>A session never lives longer than this, however active.</summary>
+    public int SessionMaxHours { get; set; } = 24;
+
+    public OidcOptions Oidc { get; set; } = new();
+}
+
+/// <summary>OpenID Connect single sign-on (authorization-code flow + PKCE, the Server being a confidential
+/// client). Changing anything but <see cref="RoleMappings"/> needs a Server restart.</summary>
+public sealed class OidcOptions
+{
+    public bool Enable { get; set; }
+
+    /// <summary>Label of the Console's sign-in button.</summary>
+    public string DisplayName { get; set; } = "Single sign-on";
+
+    /// <summary>The provider's issuer URL, e.g. "https://auth.example.com" (its /.well-known/openid-configuration is read).</summary>
+    public string Authority { get; set; } = string.Empty;
+
+    public string ClientId { get; set; } = "orbitmesh";
+
+    /// <summary>The client secret as the provider knows it (the plain value, not Authelia's hash). Can also be
+    /// supplied through the OrbitMesh__Auth__Oidc__ClientSecret environment variable.</summary>
+    public string ClientSecret { get; set; } = string.Empty;
+
+    public bool RequireHttpsMetadata { get; set; } = true;
+
+    public List<string> RequestedScopes { get; set; } = ["openid", "profile", "email", "groups"];
+
+    /// <summary>Claim holding the login shown in the Console and the audit log; the session is named "oidc:&lt;value&gt;".</summary>
+    public string UsernameClaim { get; set; } = "preferred_username";
+
+    public string GroupsClaim { get; set; } = "groups";
+
+    /// <summary>Who may sign in, and with which scopes: a user gets the union of the scopes of every mapping
+    /// whose Group they belong to, and is refused when none matches. Evaluated live, so editing a mapping
+    /// applies to open sessions too.</summary>
+    public List<OidcRoleMapping> RoleMappings { get; set; } = new();
+
+    /// <summary>Enabled and complete enough to work. A half-configured provider counts as off, so it can't
+    /// close first-run setup (see ManagementController.GetSetupStatus) without offering another way in.</summary>
+    [JsonIgnore]
+    public bool IsUsable => Enable
+        && !string.IsNullOrWhiteSpace(Authority)
+        && !string.IsNullOrWhiteSpace(ClientId)
+        && !string.IsNullOrEmpty(ClientSecret);
+}
+
+public sealed class OidcRoleMapping
+{
+    public string Group { get; set; } = string.Empty;
+
+    /// <summary>OrbitMeshScope names; "*" stands for every scope.</summary>
+    public List<string> Scopes { get; set; } = [];
 }
 
 /// <summary>A NuGet V3 feed OrbitMesh packages can be browsed from and downloaded from - e.g. a
@@ -102,9 +171,11 @@ public sealed class FileServerOptions
 // hands it back out verbatim (see PackageDescription.AccessKey / PackageInstance's launch args) so a
 // package can open its own connection with it, which a one-way hash could never support.
 //
-// Human: a Console login. Stored as a salted PBKDF2 hash (see AccessKeyHasher) - nothing reads a
-// Human credential's key back out, so there's no reason to keep it recoverable, and a human-chosen
-// password benefits far more from a deliberately slow hash than a high-entropy random machine token does.
+// Human: a Console login. AccessKey holds a salted PBKDF2 hash of the password (see PasswordHasher) -
+// nothing reads it back out, and a human-chosen password benefits far more from a deliberately slow hash
+// than a high-entropy random machine token does. A Human credential is never presented per request: it
+// signs in (AuthController) and the session (SessionStore) carries the requests after that. (Hashes made
+// by AccessKeyHasher, before sessions existed, are still accepted at sign-in and upgraded there.)
 public enum CredentialKind
 {
     Machine,

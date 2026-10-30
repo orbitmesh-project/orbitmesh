@@ -4,7 +4,7 @@
 
 import * as signalrClient from "./signalr-client.js";
 import * as managementApi from "./management-api.js";
-import { getAccessKey, getUsername, isLoggedIn, renewCookie, logout as clearAuthCookies } from "./auth.js";
+import { fetchSession, logout as endSession } from "./auth.js";
 
 const { reactive } = Vue;
 
@@ -12,9 +12,11 @@ function createStore() {
     const store = reactive({
         connectionState: "Disconnected",
         orbitmeshServerUri: window.location.origin,
-        username: getUsername(),
-        accessKey: getAccessKey(),
-        isLoggedIn: isLoggedIn(),
+        // The signed-in session lives in an HttpOnly cookie the page can't see: who it is and what it may
+        // do come from the server (restoreSession / signIn), never from anything stored in the browser.
+        username: "",
+        scopes: [],
+        isLoggedIn: false,
 
         edges: {},
         packages: {},
@@ -308,7 +310,6 @@ function createStore() {
             } else if (change.newState === ConnectionState.connecting) {
                 store.connectionState = "Connecting";
             } else if (change.newState === ConnectionState.connected) {
-                renewCookie();
                 store.connectionState = "Connected";
                 initManagementFeatures();
                 connectedAtLeastOnce = true;
@@ -329,9 +330,9 @@ function createStore() {
 
     function connect() {
         const friendlyName = "ControlCenter:" + store.username;
-        store.consumer = signalrClient.createOrbitMeshConsumer(store.orbitmeshServerUri, store.accessKey, friendlyName);
-        store.controller = signalrClient.createOrbitMeshController(store.orbitmeshServerUri, store.accessKey, friendlyName);
-        managementApi.initializeClient(store.orbitmeshServerUri, store.accessKey, friendlyName);
+        store.consumer = signalrClient.createOrbitMeshConsumer(store.orbitmeshServerUri, null, friendlyName);
+        store.controller = signalrClient.createOrbitMeshController(store.orbitmeshServerUri, null, friendlyName);
+        managementApi.initializeClient(store.orbitmeshServerUri, friendlyName);
 
         wireControllerEvents();
         wireConnectionState();
@@ -347,19 +348,31 @@ function createStore() {
         if (store.consumer) {
             store.consumer.connection.stop();
         }
-        clearAuthCookies();
+        // Ends the session server-side too (and drops the cookie) - not awaited: the page is moving to
+        // the sign-in form either way, and an unreachable server just lets the session idle out.
+        endSession(store.orbitmeshServerUri);
         store.isLoggedIn = false;
         store.username = "";
-        store.accessKey = "";
+        store.scopes = [];
     }
 
-    // Called after a successful login (see Pages/Login.js) - store.username/accessKey are read from
-    // the cookies auth.js just set, then the SignalR connections are opened for the first time.
-    function signIn() {
-        store.username = getUsername();
-        store.accessKey = getAccessKey();
+    // Called after a successful sign-in (see Pages/Login.js) with the session the server returned, then
+    // the SignalR connections are opened for the first time.
+    function signIn(session) {
+        store.username = session.Name;
+        store.scopes = session.Scopes || [];
         store.isLoggedIn = true;
         connect();
+    }
+
+    // On page load: is there still a valid session cookie from before? Asks the server (the only one
+    // who can tell, the cookie being HttpOnly) and, if so, reconnects without bouncing through the
+    // sign-in form. Resolves either way - an unreachable server just leaves the user at the form.
+    async function restoreSession() {
+        const session = await fetchSession(store.orbitmeshServerUri);
+        if (session) {
+            signIn(session);
+        }
     }
 
     // A page component's mounted() hook can run before store.connect() has finished opening the
@@ -398,6 +411,7 @@ function createStore() {
 
     store.connect = connect;
     store.signIn = signIn;
+    store.restoreSession = restoreSession;
     store.logout = logout;
     store.onConnected = onConnected;
     store.onManagementAvailable = onManagementAvailable;

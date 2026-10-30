@@ -76,6 +76,13 @@ export default {
         shortType(type) {
             return type ? type.split(".").pop() : "N/A";
         },
+        // A bare time of day is ambiguous for an item that only updates in a daily window (e.g. a
+        // commute route): "17:56:57" could be today or yesterday. Today's updates stay time-only;
+        // anything older gets its date too.
+        formatLastUpdate(value) {
+            const date = new Date(value);
+            return date.toDateString() === new Date().toDateString() ? date.toLocaleTimeString() : date.toLocaleString();
+        },
         previewValue(value) {
             if (value === null || value === undefined) {
                 return "N/A";
@@ -177,7 +184,7 @@ export default {
                             <td :title="previewValue(so.Value)"><span class="telemetry-value">{{ previewValue(so.Value) }}</span></td>
                             <td :title="so.Type">{{ shortType(so.Type) }}</td>
                             <td><span class="badge" :class="so.IsExpired ? 'disconnected' : 'connected'">{{ so.IsExpired ? 'Expired' : 'Valid' }}</span></td>
-                            <td>{{ new Date(so.LastUpdate).toLocaleTimeString() }}</td>
+                            <td :title="new Date(so.LastUpdate).toLocaleString()">{{ formatLastUpdate(so.LastUpdate) }}</td>
                             <td class="actions"><button @click="view(so)">View</button></td>
                         </tr>
                     </tbody>

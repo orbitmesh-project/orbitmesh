@@ -42,6 +42,10 @@ await consumer.connection.start();
 
 Il ne dépend de rien de propre à la Console - juste `@microsoft/signalr` chargé sur la page. Rien n'empêche un dashboard externe d'importer ce fichier dès aujourd'hui.
 
+::: warning La clé d'un dashboard n'est pas plus privée que le site
+Un dashboard s'authentifie avec l'`accessKey` d'un **identifiant Machine** (les sessions de personnes sont réservées à la Console). Le JavaScript de la page doit la connaître : quiconque peut ouvrir la page - ou récupérer un `config.json` posé à côté - l'a. Donnez-lui **uniquement les scopes nécessaires** (`telemetry:read` pour un dashboard d'affichage, plus `messages:execute` s'il envoie des commandes) et resserrez ses `authorizations` ; restreignez le site avec `localhostOnly` ou votre proxy s'il ne doit pas être public. Voir [Contrôle d'accès](/fr/guide/architecture/access-control).
+:::
+
 ::: tip TODO
 Extraire `signalr-client.js` de `orbitmesh-console/Scripts/` vers un emplacement partagé (un petit package npm, ou un dossier dans un dépôt commun) pour qu'un dashboard externe puisse en dépendre sans copier le fichier.
 :::

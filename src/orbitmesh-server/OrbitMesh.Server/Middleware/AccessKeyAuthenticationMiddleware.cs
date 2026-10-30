@@ -22,7 +22,8 @@ public sealed class AccessKeyAuthenticationMiddleware(RequestDelegate next, ILog
         IOrbitMeshDirectory directory,
         OrbitMeshMetrics metrics,
         LoginAttemptLimiter attemptLimiter,
-        CredentialUsageTracker usageTracker)
+        CredentialUsageTracker usageTracker,
+        SessionStore sessions)
     {
         // Double-slash paths (the console builds some URLs as `{origin}/` + `/rest/...`) are already
         // collapsed by the app.Use(...) middleware registered before UseRouting() in Program.cs, which
@@ -74,6 +75,14 @@ public sealed class AccessKeyAuthenticationMiddleware(RequestDelegate next, ILog
             return;
         }
 
+        // Sign-in, sign-out and the OIDC redirect dance authenticate themselves (AuthController) - a person
+        // signing in has no session yet, and the lockout is applied to the password attempts there.
+        if (path.StartsWithSegments("/rest/auth", StringComparison.OrdinalIgnoreCase))
+        {
+            await next(context);
+            return;
+        }
+
         var remoteIp = context.Connection.RemoteIpAddress;
         if (attemptLimiter.IsLockedOut(remoteIp))
         {
@@ -85,7 +94,23 @@ public sealed class AccessKeyAuthenticationMiddleware(RequestDelegate next, ILog
 
         var edgeName = context.Request.GetHeaderOrQuery(OrbitMeshHeaderNames.EdgeName);
         var packageName = context.Request.GetHeaderOrQuery(OrbitMeshHeaderNames.PackageName);
-        var accessKey = context.Request.GetHeaderOrQuery(OrbitMeshHeaderNames.AccessKey);
+        // The AccessKey if one was presented, otherwise the Console's session cookie. Resolved once here and
+        // handed down (HttpContext.GetEffectiveAccessKey) so the controllers and RequiresScope don't each
+        // re-derive - and re-verify - it.
+        var accessKey = CallerKeys.FromRequest(context.Request, sessions, out var presentedAccessKey);
+        context.SetEffectiveAccessKey(accessKey);
+
+        // A cookie is sent by the browser on its own, so a request riding on it must also prove it was
+        // built by the Console's script, not by a form on another page: the identity headers have to be
+        // real headers (a cross-origin script can't set them without a CORS preflight, which is refused).
+        if (CallerKeys.IsSessionKey(accessKey) && MutatingMethods.Contains(context.Request.Method)
+            && !context.Request.Headers.ContainsKey(OrbitMeshHeaderNames.EdgeName))
+        {
+            metrics.AccessDenied();
+            context.Response.StatusCode = StatusCodes.Status403Forbidden;
+            await context.Response.WriteAsync("Forbidden");
+            return;
+        }
 
         var accessType = OrbitMeshAccessType.OrbitMesh;
         if (path.StartsWithSegments("/rest/controller", StringComparison.OrdinalIgnoreCase))
@@ -113,7 +138,10 @@ public sealed class AccessKeyAuthenticationMiddleware(RequestDelegate next, ILog
         }
 
         metrics.AccessDenied();
-        if (attemptLimiter.RecordFailure(remoteIp))
+        // Only a request that actually presented an AccessKey can be a guess worth counting. One with none
+        // (or with a stale session cookie, which can't be guessed) is just unauthenticated - counting those
+        // would lock a user out of their own IP the moment their session expires and the Console retries.
+        if (presentedAccessKey && attemptLimiter.RecordFailure(remoteIp))
         {
             logger.LogWarning("Locking out {RemoteIp} for repeated failed AccessKey attempts.", remoteIp);
         }

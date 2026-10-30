@@ -4,24 +4,20 @@
 let urlBase = null;
 let defaultHeaders = {};
 
-export function initializeClient(serverUri, accessKey, friendlyName) {
+// No credential travels in these headers: the request is authenticated by the HttpOnly session cookie the
+// browser attaches on its own. EdgeName/PackageName are still required - for unsafe methods the server
+// insists on EdgeName being a real header, which a page on another origin can't set (CSRF protection).
+export function initializeClient(serverUri, friendlyName) {
     urlBase = serverUri.replace(/\/+$/, "") + "/rest/management/";
-    defaultHeaders = { EdgeName: "Management", PackageName: friendlyName, AccessKey: accessKey };
+    defaultHeaders = { EdgeName: "Management", PackageName: friendlyName };
 }
 
-// Fired whenever a management API call comes back 401/403 - the AccessKey cookie has expired or been
-// revoked server-side. The console shell (app.js) uses this to force a logout and bounce to /login
+// Fired whenever a management API call comes back 401/403 - the session has expired or been revoked
+// server-side. The console shell (app.js) uses this to force a logout and bounce to /login
 // instead of leaving the user stranded on a page that silently can't load or save anything.
 let unauthorizedHandler = null;
 export function setUnauthorizedHandler(handler) {
     unauthorizedHandler = handler;
-}
-
-// For when the signed-in admin resets their OWN credential's password (see Credentials.js) - every
-// REST call here resends this AccessKey, so it has to be refreshed in place or every request after the
-// reset 403s until the page is reloaded.
-export function updateAccessKey(accessKey) {
-    defaultHeaders = { ...defaultHeaders, AccessKey: accessKey };
 }
 
 function buildUrl(method, parameters) {
@@ -136,11 +132,11 @@ export async function getSetupStatus(serverUri) {
     }
     return response.json();
 }
-export async function createAdminAccount(serverUri, name, accessKey) {
+export async function createAdminAccount(serverUri, name, password) {
     const response = await fetch(serverUri.replace(/\/+$/, "") + "/rest/management/setup/create-admin", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ Name: name, AccessKey: accessKey })
+        body: JSON.stringify({ Name: name, Password: password })
     });
     if (!response.ok) {
         throw new ManagementApiError(response.status, await response.text().catch(() => ""));
@@ -149,8 +145,9 @@ export async function createAdminAccount(serverUri, name, accessKey) {
 
 // Credentials
 export const getCredentials = (includeAccessKeys) => get("credentials", { includeAccessKeys: !!includeAccessKeys });
-// accessKey: "" means "leave the stored key alone" (role/enable-only edit) - the server preserves the
-// existing key in that case, see ManagementController.InsertOrUpdateCredential. scopes is an array of
+// accessKey is a Machine credential's key, or - for a Human one - the password as typed (the server only
+// ever stores a salted hash of it). "" means "leave the stored secret alone" (role/enable-only edit) - the
+// server preserves the existing one in that case, see ManagementController.InsertOrUpdateCredential. scopes is an array of
 // OrbitMeshScope strings (see Pages/Credentials.js's scope matrix).
 export const upsertCredential = (name, accessKey, kind, enable, scopes) =>
     post("credentials", { Name: name, AccessKey: accessKey || "", Kind: kind, Enable: enable, Scopes: scopes || [] });

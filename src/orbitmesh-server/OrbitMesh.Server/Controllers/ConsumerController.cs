@@ -64,5 +64,6 @@ public sealed class ConsumerController(
         }
     }
 
-    private string? GetAccessKey() => Request.GetHeaderOrQuery(OrbitMeshHeaderNames.AccessKey);
+    // Set by AccessKeyAuthenticationMiddleware: the presented AccessKey, or the Console's session.
+    private string? GetAccessKey() => HttpContext.GetEffectiveAccessKey();
 }

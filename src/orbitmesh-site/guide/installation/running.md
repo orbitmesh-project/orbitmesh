@@ -49,7 +49,7 @@ The Edge downloads any assigned package from the Server's package repository on 
 
 ## Securing the Server
 
-- **Create the administrator account right after the first start.** Until `create-admin` has run, anyone who can reach the port can create it (and the account has every scope). Start the Server on a network you trust, or firewall the port, until that's done.
+- **Create the administrator account right after the first start.** Until `create-admin` has run, anyone who can reach the port can create it (and the account has every scope). Start the Server on a network you trust, or firewall the port, until that's done. (With [single sign-on](/guide/architecture/access-control#single-sign-on-with-authelia-openid-connect) configured there is no such step: the identity provider's groups decide who administers.)
 - **Use HTTPS.** AccessKeys travel in request headers, so plain HTTP exposes them to anyone on the path. Either put the Server behind a TLS reverse proxy, or let Kestrel terminate TLS itself with a certificate:
 
   ```json
@@ -63,3 +63,6 @@ The Edge downloads any assigned package from the Server's package repository on 
 - **Behind a reverse proxy, list it in `OrbitMesh:TrustedProxies`** (its IP address). Otherwise every client appears to come from the proxy: the failed-login lockout (10 attempts per 5 minutes per IP, shared by REST and the SignalR hubs) becomes global, and a file server marked `localhostOnly` is open to every client of a same-host proxy.
 - **Self-updates must be verifiable.** Set `UpdateOptions:PublicKeys` to the release signing key; each release is then checked against its signed manifest (signature, file hashes, and that its version is the announced one and newer than what's running). With no key configured, updates are refused unless you explicitly set `UpdateOptions:AllowUnsignedReleases` to `true`. The update token is only ever sent to the update server's own host.
 - **The Console and Kiosk may not be embedded in another site's frame** (`frame-ancestors 'self'`).
+- **Keep the proxy faithful to the original `Host` header.** The Console's session cookie only works from the Server's own origin, and the single sign-on redirect address is built from the host name users reach (see [Access control](/guide/architecture/access-control)).
+- **Back up `appsettings.json` and the `keys/` folder together.** `keys/credential-encryption.key` is what makes the stored Machine keys readable; `keys/` also holds the sessions and the single sign-on state, so keep it readable by the Server's user only.
+- **Files served by a `fileServers` entry are public** (no AccessKey), and so is `/metrics`. Don't put a secret in a static site's folder - a dashboard's `config.json` holding an AccessKey is readable by anyone who can reach the port unless the entry is `localhostOnly` or your proxy restricts it. Give such a key only the scopes it needs (a display-only dashboard: `telemetry:read`).

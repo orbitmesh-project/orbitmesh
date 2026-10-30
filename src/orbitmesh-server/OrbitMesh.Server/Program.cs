@@ -43,6 +43,8 @@ builder.Services.AddSingleton<LoginAttemptLimiter>();
 builder.Services.AddSingleton<SagaRegistry>();
 builder.Services.AddSingleton<CredentialUsageTracker>();
 builder.Services.AddSingleton<AccessKeyCipher>();
+builder.Services.AddSingleton<SessionStore>();
+builder.Services.AddHostedService<SessionMaintenanceService>();
 builder.Services.AddHostedService<CredentialUsageFlushService>();
 builder.Services.AddSingleton<PackageRegistrySync>();
 builder.Services.AddSingleton<ReleaseServerClient>();
@@ -103,6 +105,19 @@ builder.Services.AddOpenTelemetry()
         .AddMeter(OrbitMeshMetrics.MeterName)
         .AddAspNetCoreInstrumentation()
         .AddPrometheusExporter());
+
+// Single sign-on (OIDC) is wired once, here: the handler's provider settings are fixed for the process's
+// lifetime, so enabling it or changing them needs a restart (role mappings, read per sign-in, don't).
+var oidcOptions = builder.Configuration.GetSection($"{OrbitMeshOptions.SectionName}:Auth:Oidc").Get<OidcOptions>() ?? new OidcOptions();
+var oidcEnabled = oidcOptions.IsUsable;
+if (oidcOptions.Enable && !oidcEnabled)
+{
+    Console.Error.WriteLine("OrbitMesh:Auth:Oidc is enabled but Authority, ClientId or ClientSecret is missing - single sign-on stays off.");
+}
+if (oidcEnabled)
+{
+    builder.AddOrbitMeshOidc(oidcOptions);
+}
 
 var listenUrls = builder.Configuration.GetSection($"{OrbitMeshOptions.SectionName}:ListenUrls").Get<string[]>();
 if (listenUrls is { Length: > 0 })
@@ -204,6 +219,13 @@ var orbitmeshOptions = app.Services.GetRequiredService<IOptionsMonitor<OrbitMesh
 app.UseWhen(
     context => !orbitmeshOptions.FileServers.Any(fs => fs.Enable && context.Request.Path.StartsWithSegments(fs.Path, StringComparison.OrdinalIgnoreCase)),
     appBranch => appBranch.UseCors());
+
+// Only the OIDC handler needs this middleware (it answers the provider's redirect to
+// /rest/auth/oidc/callback); nothing else in the pipeline relies on the ASP.NET authentication model.
+if (oidcEnabled)
+{
+    app.UseAuthentication();
+}
 
 // A bare "/console-next" (no trailing slash) serves index.html fine, but its relative asset hrefs then
 // resolve against the site root instead of "/console-next/" - redirect to add the slash.

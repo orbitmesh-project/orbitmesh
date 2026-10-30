@@ -1,95 +1,64 @@
-// Cookie/AccessKey session handling. The one server call (checkControllerAccess) uses fetch.
+// Sign-in is the server's business: it hands the browser an HttpOnly session cookie that this script can
+// neither read nor forge, so there is nothing to store, renew or compute here - this module only calls
+// /rest/auth. (It used to keep a username/AccessKey cookie, with the AccessKey derived client-side from the
+// password, and re-send that key with every request.)
 
-const AUTH_COOKIE_NAMES = { username: "username", accessKey: "accessKey", lifetime: "lifetime" };
-
-function getCookie(name) {
-    const match = document.cookie.split("; ").find((row) => row.startsWith(name + "="));
-    return match ? decodeURIComponent(match.split("=").slice(1).join("=")) : "";
+function authUrl(serverUri, path) {
+    return serverUri.replace(/\/+$/, "") + "/rest/auth/" + path;
 }
 
-function setCookie(name, value, expirationSeconds) {
-    let expires = "Thu, 01 Jan 1970 00:00:00 UTC";
-    if (expirationSeconds > 0) {
-        const date = new Date();
-        date.setTime(date.getTime() + expirationSeconds * 1000);
-        expires = date.toUTCString();
+async function failure(response, fallback) {
+    const text = await response.text().catch(() => "");
+    return new Error(text && !text.startsWith("{") ? text : fallback);
+}
+
+// What the sign-in page should offer: the password form, and/or single sign-on through the identity
+// provider the server is configured with (see OrbitMesh:Auth in appsettings.json).
+export async function getAuthConfig(serverUri) {
+    const response = await fetch(authUrl(serverUri, "config"));
+    if (!response.ok) {
+        throw await failure(response, `Couldn't read the sign-in options (HTTP ${response.status})`);
     }
-    // SameSite=Strict: the cookie is only ever read by this page's own JS and re-sent by it, never needed
-    // on a cross-site navigation. Secure whenever the page itself is served over HTTPS (it can't be set
-    // on plain HTTP - the browser would silently drop the cookie and break login there).
-    const secure = window.location.protocol === "https:" ? "; Secure" : "";
-    document.cookie = `${name}=${encodeURIComponent(value)}; expires=${expires}; path=/; SameSite=Strict${secure}`;
+    return response.json();
 }
 
-function getParameterByName(name) {
-    return new URLSearchParams(window.location.search).get(name);
-}
-
-export function getUsername() {
-    return getCookie(AUTH_COOKIE_NAMES.username);
-}
-
-export function getAccessKey() {
-    return getCookie(AUTH_COOKIE_NAMES.accessKey);
-}
-
-export function isLoggedIn() {
-    return getUsername() !== "" && getAccessKey() !== "";
-}
-
-// Renews the cookie's own expiration on every "still connected" tick, so a session in active use
-// never silently expires mid-session.
-export function renewCookie() {
-    const username = getUsername();
-    if (username === "") {
-        return;
-    }
-    const lifetime = parseInt(getCookie(AUTH_COOKIE_NAMES.lifetime), 10) || 0;
-    setCookie(AUTH_COOKIE_NAMES.username, username, lifetime);
-    setCookie(AUTH_COOKIE_NAMES.accessKey, getAccessKey(), lifetime);
-    setCookie(AUTH_COOKIE_NAMES.lifetime, String(lifetime), lifetime);
-}
-
-export function logout() {
-    setCookie(AUTH_COOKIE_NAMES.username, "", 0);
-    setCookie(AUTH_COOKIE_NAMES.accessKey, "", 0);
-    setCookie(AUTH_COOKIE_NAMES.lifetime, "", 0);
-}
-
-// SHA-1 of username+password, matching the server's credential.AccessKey convention - native
-// SubtleCrypto. Exported so the Credentials page can offer a "Login/Password" option (computing
-// the AccessKey automatically) alongside entering a raw AccessKey directly.
-export async function computeAccessKey(username, password) {
-    const data = new TextEncoder().encode(username + password);
-    const digest = await crypto.subtle.digest("SHA-1", data);
-    return Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, "0")).join("");
-}
-
-export async function login(username, password, expirationMinutes) {
-    const accessKey = await computeAccessKey(username, password);
-    loginWithAccessKey(username, accessKey, expirationMinutes);
-}
-
-export function loginWithAccessKey(username, accessKey, expirationMinutes) {
-    const seconds = expirationMinutes * 60;
-    setCookie(AUTH_COOKIE_NAMES.username, username, seconds);
-    setCookie(AUTH_COOKIE_NAMES.accessKey, accessKey, seconds);
-    setCookie(AUTH_COOKIE_NAMES.lifetime, String(seconds), seconds);
-}
-
-// Refreshes just the accessKey cookie (keeping the existing username/lifetime) - for when a signed-in
-// admin resets their OWN credential's password (see Credentials.js): the server now only accepts the
-// new hash, so the old cookie would otherwise 403 on this admin's very next request.
-export function updateAccessKeyCookie(accessKey) {
-    const lifetime = parseInt(getCookie(AUTH_COOKIE_NAMES.lifetime), 10) || 0;
-    setCookie(AUTH_COOKIE_NAMES.accessKey, accessKey, lifetime);
-}
-
-export async function checkControllerAccess(serverUri, username, accessKey) {
-    const response = await fetch(`${serverUri}/rest/controller/CheckAccess`, {
-        headers: { EdgeName: "Controller", PackageName: "ControlCenter:" + username, AccessKey: accessKey }
+export async function login(serverUri, username, password) {
+    const response = await fetch(authUrl(serverUri, "login"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ Name: username, Password: password })
     });
-    return response.ok;
+    if (!response.ok) {
+        throw await failure(response, response.status === 429 ? "Too many failed attempts - try again later." : "Invalid credentials.");
+    }
+    return response.json();
+}
+
+export async function logout(serverUri) {
+    try {
+        await fetch(authUrl(serverUri, "logout"), { method: "POST", headers: { EdgeName: "Console" } });
+    } catch {
+        // The cookie is dropped server-side on its own once it idles out; nothing more to do from here.
+    }
+}
+
+// The signed-in session ({ Name, Scopes, ExpiresUtc }), or null if there isn't a valid one. Calling it also
+// counts as activity, which is what keeps an open Console from idling out.
+export async function fetchSession(serverUri) {
+    try {
+        const response = await fetch(authUrl(serverUri, "me"));
+        return response.ok ? await response.json() : null;
+    } catch {
+        // Server unreachable: not the same as "signed out" - the SignalR reconnect logic deals with that.
+        return undefined;
+    }
+}
+
+// Where "Sign in with ..." sends the browser: the server redirects to the identity provider and, after
+// the user authenticated there, back to returnUrl (or to errorUrl with ?login_error=... if refused).
+export function oidcLoginUrl(serverUri, returnUrl, errorUrl) {
+    const params = new URLSearchParams({ returnUrl, errorUrl });
+    return authUrl(serverUri, "oidc/login") + "?" + params.toString();
 }
 
 export function getParentUri() {

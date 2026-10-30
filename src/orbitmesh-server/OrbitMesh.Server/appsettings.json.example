@@ -23,6 +23,21 @@
       }
     ],
     "allowedOrigins": [],
+    "auth": {
+      "localLoginEnabled": true,
+      "sessionIdleMinutes": 30,
+      "sessionMaxHours": 24,
+      "oidc": {
+        "enable": false,
+        "displayName": "Authelia",
+        "authority": "https://auth.example.com",
+        "clientId": "orbitmesh",
+        "clientSecret": "",
+        "roleMappings": [
+          { "group": "orbitmesh-admins", "scopes": [ "*" ] }
+        ]
+      }
+    },
     "recoveryOptions": {
       "restartAfterFailure": true,
       "numberOfRetry": 3,

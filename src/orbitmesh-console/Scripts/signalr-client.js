@@ -221,6 +221,10 @@ class ControllerProxy {
     }
 }
 
+// accessKey is for machine callers (an external dashboard authenticating with a Machine credential - see the
+// "Hosting other sites" guide). The Console itself passes null: its connections carry no AccessKey, the
+// browser sends the HttpOnly session cookie with the WebSocket handshake and the server authenticates the
+// connection from that (same-origin only).
 export function createOrbitMeshConsumer(serverUri, accessKey, friendlyName) {
     const connection = new ConnectionWrapper(serverUri, "ConsumerHub", { EdgeName: "Consumer", PackageName: friendlyName, AccessKey: accessKey });
     return new ConsumerProxy(connection);

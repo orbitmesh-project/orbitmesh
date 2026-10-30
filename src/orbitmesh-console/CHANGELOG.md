@@ -3,6 +3,30 @@
 Format: [Keep a Changelog](https://keepachangelog.com/). Versions match the `VERSION` file at
 the root of this project, bumped by `cicd/release-static-site.ps1`.
 
+## [1.3.0]
+
+### Changed
+
+- **Sign-in goes through the Server's session** (Server 1.3.0): the password is sent to `POST rest/auth/login`
+  and the Server answers with an `HttpOnly` session cookie. The Console no longer derives a key from the
+  password, no longer keeps a username/key cookie, and no longer sends an AccessKey with its REST calls or its
+  SignalR connections (they ride on the cookie). A page reload asks the Server whether the session is still
+  valid (`GET rest/auth/me`), and so does a once-a-minute check that also keeps an open Console from idling out.
+- Setting a Human account's password (new account, reset) sends it as typed; the Server hashes it. Resetting
+  your own password no longer logs you out - your other sessions are the ones that end.
+
+### Added
+
+- **Single sign-on**: when the Server has an OpenID Connect provider configured (e.g. Authelia), the sign-in
+  page offers "Sign in with <provider>" next to the password form, and says why when the provider refused
+  the user or the exchange failed. The password form is hidden if the Server turns local sign-in off.
+
+### Fixed
+
+- Telemetry items: the "Last update" column showed only a time of day, so an item last updated yesterday
+  evening looked like it had just updated. It now adds the date when the update isn't from today, and the
+  full date/time is in the cell's tooltip.
+
 ## [1.2.17]
 
 ### Security

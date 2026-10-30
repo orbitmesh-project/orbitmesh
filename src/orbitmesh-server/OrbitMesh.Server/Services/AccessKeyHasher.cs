@@ -3,13 +3,11 @@ using System.Security.Cryptography;
 namespace OrbitMesh.Server.Services;
 
 /// <summary>
-/// Salted PBKDF2-SHA256 for Human credentials only (see <see cref="Configuration.CredentialKind"/>) -
-/// Machine credentials stay plaintext at rest since the Server hands them back out verbatim.
-/// Iteration count is deliberately modest (not OWASP's ~600k password-hash recommendation): this
-/// runs on every Management API/Console request from a signed-in human, not just at login (there is
-/// no separate session-token concept here - the same value re-authenticates every request), and
-/// human/console traffic volume is low enough that this is still a meaningful brute-force cost
-/// without adding noticeable request latency.
+/// LEGACY hash of a Human credential, from before sessions existed: PBKDF2-SHA256 (deliberately modest, 20,000
+/// iterations, because it ran on every request) over the SHA-1 of "username + password" that the old Console
+/// computed itself and sent as its AccessKey. New hashes are made by <see cref="PasswordHasher"/>; this class
+/// only remains so an account created before can still sign in once (AuthController then upgrades the hash)
+/// and so an old Console keeps working until then.
 /// </summary>
 public static class AccessKeyHasher
 {

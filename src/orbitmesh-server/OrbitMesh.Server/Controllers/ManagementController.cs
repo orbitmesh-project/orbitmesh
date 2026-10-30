@@ -41,6 +41,7 @@ public sealed class ManagementController(
     CredentialUsageTracker credentialUsageTracker,
     AccessKeyCipher accessKeyCipher,
     LoginAttemptLimiter loginAttemptLimiter,
+    SessionStore sessions,
     ILogger<ManagementController> logger) : ControllerBase
 {
     [HttpGet("CheckAccess")]
@@ -181,15 +182,22 @@ public sealed class ManagementController(
         // the CANDIDATE config being saved (would that same credential still have configuration:write
         // afterwards?) - a raw AccessKey string compare doesn't work here since Human/Machine keys are
         // hashed/encrypted at rest, never equal to the raw presented value.
-        var callerAccessKey = Request.GetHeaderOrQuery(OrbitMeshHeaderNames.AccessKey);
+        var callerAccessKey = HttpContext.GetEffectiveAccessKey();
         var callerName = directory.GetCredentialName(callerAccessKey);
-        var callerStillHasAccess = callerName != null && candidate.Credentials.Any(c =>
-            c.Enable && c.Name.Equals(callerName, StringComparison.OrdinalIgnoreCase) && c.Scopes.Contains(OrbitMeshScope.ConfigurationWrite));
+        // A single-sign-on caller has no credential entry: what it keeps is decided by the candidate's
+        // role mappings applied to the groups it signed in with.
+        var callerGroups = directory.GetFederatedGroups(callerAccessKey);
+        var callerStillHasAccess = callerGroups != null
+            ? candidate.Auth.Oidc.IsUsable && OidcRoleMapper.ScopesFor(candidate.Auth.Oidc, callerGroups).Contains(OrbitMeshScope.ConfigurationWrite)
+            : callerName != null && candidate.Credentials.Any(c =>
+                c.Enable && c.Name.Equals(callerName, StringComparison.OrdinalIgnoreCase) && c.Scopes.Contains(OrbitMeshScope.ConfigurationWrite));
         if (!callerStillHasAccess)
         {
-            return BadRequest(
-                "This change would revoke your own configuration:write access (no enabled credential named " +
-                $"'{callerName}' would keep that scope) - refusing to apply it.");
+            return BadRequest(callerGroups != null
+                ? "This change would revoke your own configuration:write access (none of your single-sign-on groups " +
+                  "would still be mapped to that scope) - refusing to apply it."
+                : "This change would revoke your own configuration:write access (no enabled credential named " +
+                  $"'{callerName}' would keep that scope) - refusing to apply it.");
         }
 
         configWriter.WriteRawJson(json);
@@ -197,7 +205,7 @@ public sealed class ManagementController(
     }
 
     private HashSet<string> CallerScopes() =>
-        directory.FindCredential(Request.GetHeaderOrQuery(OrbitMeshHeaderNames.AccessKey))?.Scopes.ToHashSet(StringComparer.Ordinal) ?? [];
+        directory.FindCredential(HttpContext.GetEffectiveAccessKey())?.Scopes.ToHashSet(StringComparer.Ordinal) ?? [];
 
     // credentials:manage and configuration:write would otherwise amount to root: a holder could grant itself
     // (or anyone) any scope, or take over a more privileged credential by replacing its key. The rule is the
@@ -233,7 +241,7 @@ public sealed class ManagementController(
             }
             var keyChanged = existing == null || existing.AccessKey != credential.AccessKey;
             var plaintext = credential.Kind == CredentialKind.Human
-                ? !AccessKeyHasher.IsHashed(credential.AccessKey)
+                ? !AccessKeyHasher.IsHashed(credential.AccessKey) && !PasswordHasher.IsHashed(credential.AccessKey)
                 : !AccessKeyCipher.IsEncrypted(credential.AccessKey);
             if (keyChanged && plaintext)
             {
@@ -243,6 +251,31 @@ public sealed class ManagementController(
         foreach (var removed in current.Credentials.Where(c => !candidate.Credentials.Any(n => n.Name.Equals(c.Name, StringComparison.OrdinalIgnoreCase))))
         {
             var delegation = CheckScopeDelegation(removed.Scopes, $"remove the credential '{removed.Name}'");
+            if (delegation != null)
+            {
+                return delegation;
+            }
+        }
+        // A single-sign-on role mapping is a credential in all but name: same delegation rule, for any
+        // mapping that is new or changed (an untouched one is left alone, whoever holds what).
+        foreach (var mapping in candidate.Auth.Oidc.RoleMappings)
+        {
+            var scopes = OidcRoleMapper.Expand(mapping.Scopes);
+            var unchanged = current.Auth.Oidc.RoleMappings.Any(m =>
+                m.Group.Equals(mapping.Group, StringComparison.OrdinalIgnoreCase)
+                && OidcRoleMapper.Expand(m.Scopes).Order(StringComparer.Ordinal).SequenceEqual(scopes.Order(StringComparer.Ordinal)));
+            if (!unchanged)
+            {
+                var delegation = CheckScopeDelegation(scopes, $"map the group '{mapping.Group}' to these scopes");
+                if (delegation != null)
+                {
+                    return delegation;
+                }
+            }
+        }
+        foreach (var gone in current.Auth.Oidc.RoleMappings.Where(m => !candidate.Auth.Oidc.RoleMappings.Any(n => n.Group.Equals(m.Group, StringComparison.OrdinalIgnoreCase))))
+        {
+            var delegation = CheckScopeDelegation(OidcRoleMapper.Expand(gone.Scopes), $"remove the mapping of the group '{gone.Group}'");
             if (delegation != null)
             {
                 return delegation;
@@ -912,7 +945,8 @@ public sealed class ManagementController(
 
     private string StoreAccessKey(CredentialOptions credential) => credential.Kind switch
     {
-        CredentialKind.Human when !AccessKeyHasher.IsHashed(credential.AccessKey) => AccessKeyHasher.Hash(credential.AccessKey),
+        // The Console sends the password as typed; it is only ever kept as a salted hash of it.
+        CredentialKind.Human when !AccessKeyHasher.IsHashed(credential.AccessKey) && !PasswordHasher.IsHashed(credential.AccessKey) => PasswordHasher.Hash(credential.AccessKey),
         CredentialKind.Machine when !AccessKeyCipher.IsEncrypted(credential.AccessKey) => accessKeyCipher.Encrypt(credential.AccessKey),
         _ => credential.AccessKey
     };
@@ -921,7 +955,15 @@ public sealed class ManagementController(
     [RequiresScope(OrbitMeshScope.CredentialsManage)]
     public IActionResult InsertOrUpdateCredential([FromBody] CredentialOptions credential)
     {
+        // "oidc:<login>" names single-sign-on sessions (audit log, usage tracking) - a local credential must
+        // not be able to pose as one.
+        if (credential.Name.StartsWith(OidcRoleMapper.SessionNamePrefix, StringComparison.OrdinalIgnoreCase))
+        {
+            return BadRequest($"Credential names can't start with '{OidcRoleMapper.SessionNamePrefix}' - that prefix is reserved for single-sign-on users.");
+        }
         var existingNow = options.CurrentValue.Credentials.FirstOrDefault(c => c.Name.Equals(credential.Name, StringComparison.OrdinalIgnoreCase));
+        // Read before the update below, which overwrites AccessKey with the stored form either way.
+        var setsNewSecret = !string.IsNullOrEmpty(credential.AccessKey);
         var delegation = CheckScopeDelegation(credential.Scopes.Concat(existingNow?.Scopes ?? []), $"create or change the credential '{credential.Name}'");
         if (delegation != null)
         {
@@ -946,23 +988,37 @@ public sealed class ManagementController(
             }
             cfg.Credentials.Add(credential);
         });
+        // A new password ends the account's other sessions (a stolen cookie must not outlive the reset), but
+        // not the one doing the reset - which is usually the account's own owner in the Console.
+        if (credential.Kind == CredentialKind.Human && setsNewSecret && existingNow != null)
+        {
+            sessions.RevokeAllFor(credential.Name, CallerKeys.SessionIdOf(HttpContext.GetEffectiveAccessKey()));
+        }
         return Ok();
     }
 
     public sealed record SetupStatus(bool NeedsSetup);
 
-    public sealed record CreateAdminRequest(string Name, string AccessKey);
+    // Password is what the Console sends now. AccessKey is the SHA-1 an older Console computed itself; it is
+    // still accepted (and kept in the legacy hash form, which signing in understands) so a Console that wasn't
+    // updated together with the Server can still finish the first-run setup.
+    public sealed record CreateAdminRequest(string Name, string? Password = null, string? AccessKey = null);
 
     // Unauthenticated by design (see AccessKeyAuthenticationMiddleware's bypass list) - there is no
     // credential yet to authenticate with on a fresh install. NeedsSetup flips to false the moment the
-    // first credential exists, so this pair of endpoints is only ever usable once per install.
+    // first credential exists, so this pair of endpoints is only ever usable once per install. With single
+    // sign-on enabled there is nothing to set up: the identity provider's groups decide who administers.
     [HttpGet("setup/status")]
-    public ActionResult<SetupStatus> GetSetupStatus() => new SetupStatus(options.CurrentValue.Credentials.Count == 0);
+    public ActionResult<SetupStatus> GetSetupStatus() =>
+        new SetupStatus(options.CurrentValue.Credentials.Count == 0 && !options.CurrentValue.Auth.Oidc.IsUsable);
 
     [HttpPost("setup/create-admin")]
     public IActionResult CreateAdmin([FromBody] CreateAdminRequest request)
     {
-        if (string.IsNullOrWhiteSpace(request.Name) || string.IsNullOrWhiteSpace(request.AccessKey))
+        var secret = !string.IsNullOrEmpty(request.Password) ? request.Password : request.AccessKey;
+        if (string.IsNullOrWhiteSpace(request.Name) || string.IsNullOrWhiteSpace(secret)
+            || request.Name.StartsWith(OidcRoleMapper.SessionNamePrefix, StringComparison.OrdinalIgnoreCase)
+            || options.CurrentValue.Auth.Oidc.IsUsable)
         {
             return BadRequest();
         }
@@ -979,7 +1035,7 @@ public sealed class ManagementController(
             cfg.Credentials.Add(new CredentialOptions
             {
                 Name = request.Name,
-                AccessKey = AccessKeyHasher.Hash(request.AccessKey),
+                AccessKey = !string.IsNullOrEmpty(request.Password) ? PasswordHasher.Hash(secret) : AccessKeyHasher.Hash(secret),
                 Kind = CredentialKind.Human,
                 Enable = true,
                 Scopes = OrbitMeshScope.All.ToList()
