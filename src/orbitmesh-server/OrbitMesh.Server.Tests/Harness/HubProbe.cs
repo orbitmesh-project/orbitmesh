@@ -10,12 +10,12 @@ public static class HubProbe
 {
     private static readonly TimeSpan AcceptedWindow = TimeSpan.FromMilliseconds(900);
 
-    public static async Task<bool> ConnectsAsync(ServerFixture server, string hub, Caller caller, string? ip = null)
+    public static async Task<bool> ConnectsAsync(ServerFixture server, string hub, Caller caller, string? ip = null, string? query = null)
     {
         ip ??= server.CreateApi().Ip;
         var closed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         await using var connection = new HubConnectionBuilder()
-            .WithUrl(new Uri(server.Server.BaseAddress, $"signalr/hubs/{hub}"), options =>
+            .WithUrl(new Uri(server.Server.BaseAddress, $"signalr/hubs/{hub}{query}"), options =>
             {
                 options.HttpMessageHandlerFactory = _ => server.Server.CreateHandler();
                 options.Transports = HttpTransportType.LongPolling;
@@ -23,6 +23,7 @@ public static class HubProbe
                 if (caller.EdgeName != null) { options.Headers["EdgeName"] = caller.EdgeName; }
                 if (caller.PackageName != null) { options.Headers["PackageName"] = caller.PackageName; }
                 if (caller.AccessKey != null) { options.Headers["AccessKey"] = caller.AccessKey; }
+                if (caller.Authorization != null) { options.Headers["Authorization"] = caller.Authorization; }
                 if (caller.SessionToken != null) { options.Headers["Cookie"] = $"{Api.SessionCookie}={caller.SessionToken}"; }
             })
             .Build();

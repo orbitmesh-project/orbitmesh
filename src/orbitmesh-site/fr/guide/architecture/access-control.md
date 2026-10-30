@@ -107,6 +107,8 @@ Les couches 4 et 5 suivent le même modèle à deux niveaux qu'AWS IAM : un scop
 | L'edge `Developer` | Développement local | Une clé détenant `developer` | REST seulement | Non | Non |
 | `/packages/{file}` (zips de packages) | Un Edge qui récupère ses packages | L'identifiant de l'Edge lui-même (`EdgeName` = cet Edge, `PackageName` = `Edge`, avec `edge:connect`), ou toute clé détenant `packages:read` | Avec `packages:read` | Avec `packages:read` | Avec `packages:read` |
 
+Chaque hub est autorisé quand sa connexion est négociée, avec les mêmes règles de porte : un appelant refusé reçoit un HTTP 403 (429 tant que son adresse est verrouillée) et n'obtient jamais de connexion.
+
 Quelques portes sont ouvertes **volontairement**, chacune bornée : `/rest/enroll` (un Edge qui demande à être approuvé), `/rest/management/setup/*` (premier lancement uniquement), `/rest/auth/*` (connexion), les sites statiques sous un chemin `FileServers`, et `/metrics` (Prometheus). Ce que vous ne voulez pas public - `/metrics`, ou un site qui garde une clé dans son propre fichier de config - doit être derrière `localhostOnly`, votre reverse proxy ou un pare-feu.
 
 ## Quatre sortes d'identité
@@ -131,7 +133,15 @@ Pour tout ce qui n'est ni un Edge ni un package, préférez un **token d'API** �
 - Il peut **expirer**, être **renouvelé** (nouveau secret, ancien mort aussitôt, mêmes nom, scopes et règles) et **révoqué** seul comme tout identifiant.
 - Il ne peut jamais détenir `edge:connect` ni `package:connect`, et il est refusé à la porte d'un Edge ou d'un package.
 
-Il se présente exactement comme une AccessKey (en-tête `AccessKey`, ou chaîne de requête quand un en-tête est impossible). Les clés Machine existantes continuent de fonctionner ; rien n'est migré.
+Présentez-le de façon standard, en jeton porteur (bearer), et rien d'autre :
+
+```bash
+curl -H "Authorization: Bearer omk_…" https://orbitmesh.example.com/rest/management/edges
+```
+
+Un appelant qui présente une clé sans nommer ni `EdgeName` ni `PackageName` est jugé à la porte de l'endpoint qu'il appelle (`/rest/management`, `/rest/controller` ou `/rest/consumer`) - il aurait pu nommer lui-même cette porte, donc rien n'est élargi. Les Edges et les packages se nomment toujours (de quel Edge est-ce la porte ?), et une session de navigateur continue d'envoyer ses en-têtes d'identité. Les anciennes formes fonctionnent toujours : l'en-tête ou la chaîne de requête `AccessKey`, avec `EdgeName` et `PackageName` ; si une `AccessKey` et un jeton bearer sont envoyés ensemble, c'est l'`AccessKey` qui est utilisée. Sur l'URL d'un hub SignalR, le paramètre `access_token` que SignalR envoie quand un transport ne peut pas poser d'en-têtes est aussi accepté - mais pas sur les URLs REST, où une clé finirait dans les journaux.
+
+Les clés Machine existantes continuent de fonctionner ; rien n'est migré.
 
 ## Scopes
 

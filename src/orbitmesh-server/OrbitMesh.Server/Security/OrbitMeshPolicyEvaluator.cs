@@ -85,7 +85,10 @@ public sealed class OrbitMeshPolicyEvaluator(
         // A cookie is sent by the browser on its own, so a request riding on it must also prove it was built by the
         // Console's script, not by a form on another page: the identity headers have to be real headers (a cross-origin
         // script can't set them without a CORS preflight, which is refused).
+        // (A hub is negotiated with a POST that carries its identity in the URL, and it changes nothing: the cookie's origin
+        // check and SameSite=Strict are what protect it.)
         if (CallerKeys.IsSessionKey(key) && MutatingMethods.Contains(context.Request.Method)
+            && !context.Request.Path.StartsWithSegments("/signalr", StringComparison.OrdinalIgnoreCase)
             && !context.Request.Headers.ContainsKey(OrbitMeshHeaderNames.EdgeName))
         {
             state.CsrfRefused = true;

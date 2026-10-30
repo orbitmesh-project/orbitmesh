@@ -10,12 +10,13 @@ public sealed class DoorHandler(IOrbitMeshDirectory directory, IHttpContextAcces
     protected override Task HandleRequirementAsync(AuthorizationHandlerContext context, DoorRequirement requirement)
     {
         var http = context.Resource as HttpContext ?? accessor.HttpContext;
+        var (edgeName, packageName) = http == null ? (null, null)
+            : requirement.FixedName != null ? (requirement.FixedName, requirement.FixedName)
+            : DoorIdentity.Resolve(http, requirement.AccessType);
+        var key = http?.GetEffectiveAccessKey();
         if (http != null
-            && directory.CheckAccess(
-                http.Request.GetHeaderOrQuery(OrbitMeshHeaderNames.EdgeName),
-                http.Request.GetHeaderOrQuery(OrbitMeshHeaderNames.PackageName),
-                http.GetEffectiveAccessKey(),
-                requirement.AccessType))
+            && directory.CheckAccess(edgeName, packageName, key, requirement.AccessType)
+            && (requirement.RequiredScope == null || directory.FindCredential(key)?.Scopes.Contains(requirement.RequiredScope) == true))
         {
             http.GetRequestState().DoorPassed = true;
             context.Succeed(requirement);
@@ -41,8 +42,8 @@ public sealed class PackageDownloadHandler(IOrbitMeshDirectory directory, IHttpC
         {
             return Task.CompletedTask;
         }
-        var edgeName = http.Request.GetHeaderOrQuery(OrbitMeshHeaderNames.EdgeName);
-        var packageName = http.Request.GetHeaderOrQuery(OrbitMeshHeaderNames.PackageName);
+        // A key and no names at all is a script: it reaches the packages through the Management door (an Edge always names itself).
+        var (edgeName, packageName) = DoorIdentity.Resolve(http, OrbitMeshAccessType.OrbitMesh, doorWhenUnnamed: OrbitMeshDefaultNames.ManagementEdgeName);
         var key = http.GetEffectiveAccessKey();
         var credential = directory.FindCredential(key);
 

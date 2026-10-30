@@ -27,7 +27,10 @@ which identity opens which door. The tests are that table, executable:
 | `AuthorizationRulesTests` | Per-credential rules for messages, groups and telemetry items |
 | `PipelineTests` | The shape of the authorization: the exact list of public endpoints, a door on every other one, a scope on every Management action, refusal by default, who may download a package zip |
 | `FileServerTests` | Static sites are public, `localhostOnly` ones answer only the local machine, credentials are never looked at there |
+| `HubNegotiationTests` | Hubs are authorized at the negotiation (403/429, never an accepted-then-closed connection), the Console's cookie-and-URL connection, the Edge and package connection scopes |
+| `EdgeApprovalTests` | Enrolling, approving and managing an Edge as a standard administrator, and who may hand out `edge:connect` |
 | `ApiTokenTests` | API tokens: format, hash-only storage, doors, expiry, revocation, rotation, delegation, configuration-editor guards |
+| `BearerTests` | `Authorization: Bearer`, the door filled in when no names are sent, `access_token` on hubs only, nothing widened |
 | `MetricsTests` | The public `/metrics` endpoint keeps working once there is traffic |
 | `SecurityPartsTests` | Password hashing, role mapper, session store, key cipher |
 

@@ -4,6 +4,45 @@ Format: [Keep a Changelog](https://keepachangelog.com/). Versions match `<Versio
 `OrbitMesh.Server.csproj`, which is what's reported to the update server (see
 `Services/ServerSelfUpdater.cs` and `Services/UpdateCheckService.cs`).
 
+## [1.5.0]
+
+### Added
+
+- **`Authorization: Bearer <key>`** is accepted as a way to present a key, next to the `AccessKey` header and query
+  string (which keep working, and win when both are sent). It is what a script calling the API with an API token
+  expects: `curl -H "Authorization: Bearer omk_..." .../rest/management/edges`. Other schemes (Basic...) in that header
+  are ignored, and a wrong bearer key counts toward the IP lockout like any wrong key.
+- **A caller that presents a key and names neither `EdgeName` nor `PackageName` is judged at the door of the endpoint
+  it calls** (`/rest/management`, `/rest/controller`, `/rest/consumer`; package downloads through the Management door),
+  so a script no longer has to send names that say nothing. Nothing is widened - it could have named that door itself -
+  and the Edge and package doors never get this: an Edge has to say which one it is, and naming only one of the two is
+  still refused. Cookie sessions keep sending their identity headers.
+- On a **hub URL** the `access_token` query parameter that SignalR sends where a transport cannot set headers is
+  accepted as the key. Not on REST URLs, where a key would end up in logs.
+
+### Changed
+
+- **The four hubs are authorized like the REST API: when the connection is negotiated.** Each hub had its own copy of the
+  checks (IP lockout, `CheckAccess`, the connection scope) in `OnConnectedAsync`, answering a refused caller by accepting
+  the connection and closing it a moment later. They now go through the same policies as the REST endpoints
+  (`hub:consumer`, `hub:control`, `hub:edge`, `hub:package`, same door rules, same identity, same lockout), and a
+  refused caller gets an **HTTP 403** (429 when locked out) at the negotiation and never a connection. Hubs are no
+  longer in the list of public endpoints, so a hub added without a policy is refused. A cookie-borne negotiation is
+  not subject to the REST rule that wants the identity headers (the Console names itself in the URL), only to the
+  cookie's own origin check.
+- Client-visible: a client that was refused used to see its connection open and then close; it now sees the start fail.
+  The .NET Edge already handled both (it falls back to REST enrollment either way - verified against a real Server: wrong
+  key, pending, approved, connected). A package started with a wrong key now stops with a clear message instead of
+  retrying forever; the .NET `PackageHost` reports it (see the Common changelog).
+
+### Fixed
+
+- **An administrator could not approve an Edge, nor manage an Edge's credential.** Approving, or editing/resetting an
+  Edge's credential, requires being allowed to hand out `edge:connect` - and no person holds `edge:connect` any more
+  (since 1.3.2 an administrator account and a single-sign-on `"*"` mapping hold every scope a person can hold, which
+  excludes the two Edge/package connection scopes), so the Console answered 403. Whoever holds `edges:write` may now hand
+  out `edge:connect`, and whoever holds `packages:manage` `package:connect`; nobody else can (a test checks both ways).
+
 ## [1.4.1]
 
 ### Security

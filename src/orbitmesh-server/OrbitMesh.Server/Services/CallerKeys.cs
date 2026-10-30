@@ -27,13 +27,41 @@ public static class CallerKeys
     /// all - only those requests can be guesses worth counting against the lockout.</summary>
     public static string? FromRequest(HttpRequest request, SessionStore sessions, out bool presentedKey)
     {
-        var presented = request.GetHeaderOrQuery(OrbitMeshHeaderNames.AccessKey);
+        var presented = PresentedKey(request);
         presentedKey = !string.IsNullOrEmpty(presented);
         if (presentedKey)
         {
             return IsSessionKey(presented) ? null : presented;
         }
         return FromSessionCookie(request, sessions);
+    }
+
+    /// <summary>The key the caller supplied, wherever it put it, in order of precedence: the <c>AccessKey</c> header or query
+    /// string (what the Edges and the SDKs send); the standard <c>Authorization: Bearer &lt;key&gt;</c> header (what a
+    /// script calling the API with a token would use); and, on a hub URL only, the <c>access_token</c> query parameter
+    /// SignalR uses where a transport can't set headers. Anything else in <c>Authorization</c> (Basic...) is not ours.</summary>
+    public static string? PresentedKey(HttpRequest request)
+    {
+        var accessKey = request.GetHeaderOrQuery(OrbitMeshHeaderNames.AccessKey);
+        if (!string.IsNullOrEmpty(accessKey))
+        {
+            return accessKey;
+        }
+
+        var authorization = request.Headers.Authorization.ToString();
+        const string bearer = "Bearer ";
+        if (authorization.StartsWith(bearer, StringComparison.OrdinalIgnoreCase) && authorization[bearer.Length..].Trim() is { Length: > 0 } token)
+        {
+            return token;
+        }
+
+        // Not on REST: a key in a URL ends up in logs, and only a hub transport that can't send headers needs it there.
+        if (request.Path.StartsWithSegments("/signalr", StringComparison.OrdinalIgnoreCase)
+            && request.Query.TryGetValue("access_token", out var queryToken) && !string.IsNullOrEmpty(queryToken.ToString()))
+        {
+            return queryToken.ToString();
+        }
+        return null;
     }
 
     public static string? FromSessionCookie(HttpRequest request, SessionStore sessions)

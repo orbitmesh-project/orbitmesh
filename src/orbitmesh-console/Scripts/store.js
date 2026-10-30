@@ -337,8 +337,10 @@ function createStore() {
         wireControllerEvents();
         wireConnectionState();
 
-        store.consumer.connection.start();
-        store.controller.connection.start();
+        // A refused negotiation (an expired session, say) rejects start(); the connection state listeners above already
+        // turn that into "Disconnected", so there is nothing more to do with the error itself.
+        store.consumer.connection.start().catch(() => {});
+        store.controller.connection.start().catch(() => {});
     }
 
     function logout() {

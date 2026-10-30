@@ -34,7 +34,6 @@ public sealed class PipelineTests(ServerFixture server) : IClassFixture<ServerFi
                 !pattern.StartsWith("rest/auth/", StringComparison.OrdinalIgnoreCase)                // sign-in, sign-out, who am I, single sign-on
                 && !pattern.StartsWith("rest/enroll", StringComparison.OrdinalIgnoreCase)            // an Edge asking to be approved
                 && !pattern.StartsWith("rest/management/setup/", StringComparison.OrdinalIgnoreCase) // first run, closes itself
-                && !pattern.StartsWith("signalr/hubs/", StringComparison.OrdinalIgnoreCase)          // hubs decide in OnConnectedAsync
                 && !pattern.Equals("metrics", StringComparison.OrdinalIgnoreCase)                    // Prometheus
                 && !pattern.Equals("openapi/{documentName}.json", StringComparison.OrdinalIgnoreCase)
                 && !pattern.Contains("{*path:nonfile}", StringComparison.Ordinal))                   // a static site's SPA fallback

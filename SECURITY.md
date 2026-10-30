@@ -38,6 +38,9 @@ Who can use which door:
 | `Developer` edge | Local development | A key holding `developer` | REST only | No | No |
 | `/packages/{file}` (package zips) | An Edge fetching its packages | The Edge's own credential (`EdgeName` = that Edge, `PackageName` = `Edge`, with `edge:connect`), or any key holding `packages:read` | With `packages:read` | With `packages:read` | With `packages:read` |
 
+Each hub is authorized when its connection is negotiated, by the same door rules: a caller that is refused gets an HTTP
+403 (429 while its address is locked out) and never a connection.
+
 Open **on purpose**, each bounded: `/rest/enroll` (an Edge asking to be approved), `/rest/management/setup/*`
 (first run only), `/rest/auth/*` (sign-in), static sites under a `FileServers` path, and `/metrics`
 (Prometheus). Restrict `/metrics`, and anything a static site's own files expose (a config file holding a
@@ -66,7 +69,11 @@ A credential is either:
   old one stops at once) and be revoked on its own. It cannot hold `edge:connect`/`package:connect`, and the
   Server refuses it at an Edge's or a package's own door even if someone assigns it to one by hand-editing
   `appsettings.json`. The fixed `omk_` prefix lets secret scanners flag a leaked token: on GitHub, add
-  `omk_[0-9a-f]{16}_[A-Za-z0-9_-]{43}` as a custom secret-scanning pattern.
+  `omk_[0-9a-f]{16}_[A-Za-z0-9_-]{43}` as a custom secret-scanning pattern. Present it as
+  `Authorization: Bearer omk_...`: a caller that presents a key and names no `EdgeName`/`PackageName` is judged
+  at the door of the endpoint it calls (never an Edge's or a package's, which must name themselves), so a plain
+  `curl` is enough. The `AccessKey` header and query string still work; `access_token` is accepted on hub URLs
+  only, never on REST URLs.
 
 A Machine key or an API token is shown **once**, at creation or reset/rotation, in the Console UI. It is never
 displayed again afterwards - if it's lost, reset (or rotate) it and get a new one. (A Human password is the one

@@ -15,9 +15,7 @@ public sealed class OrbitMeshHub(
     OrbitMeshLogService packageLog,
     IHubContext<ConsumerHub> consumerHub,
     IHubContext<ControlHub> controlHub,
-    CredentialUsageTracker usageTracker,
     SagaRegistry sagaRegistry,
-    LoginAttemptLimiter attemptLimiter,
     ILogger<OrbitMeshHub> logger) : Hub
 {
     // CheckAccess alone doesn't require any scope for this access type (see IOrbitMeshDirectory.CanAccess) -
@@ -26,28 +24,10 @@ public sealed class OrbitMeshHub(
 
     public override async Task OnConnectedAsync()
     {
+        // Who may connect (the credential of this package or of its Edge, holding package:connect) was decided when
+        // the connection was negotiated - OrbitMeshPolicies.PackageHub, mapped in Program.cs.
         Context.CaptureConnectionMetadata();
-        if (Context.IsLockedOut(attemptLimiter))
-        {
-            metrics.AccessDenied();
-            Context.Abort();
-            return;
-        }
-        if (!directory.CheckAccess(Context.GetEdgeName(), Context.GetPackageName(), Context.GetAccessKey(), OrbitMeshAccessType.OrbitMesh)
-            || !HasScope(OrbitMeshScope.PackageConnect))
-        {
-            metrics.AccessDenied();
-            Context.RecordFailure(attemptLimiter, logger);
-            logger.LogWarning(
-                "OrbitMeshHub connection rejected (EdgeName={EdgeName}, PackageName={PackageName}). " +
-                "Check that a matching Edge/Credential is configured in appsettings.json.",
-                Context.GetEdgeName(), Context.GetPackageName());
-            Context.Abort();
-            return;
-        }
-        metrics.AccessGranted();
         metrics.PackageConnected();
-        usageTracker.RecordUse(directory.GetCredentialName(Context.GetAccessKey()));
 
         var edgeName = Context.GetEdgeName()!;
         var packageName = Context.GetPackageName()!;

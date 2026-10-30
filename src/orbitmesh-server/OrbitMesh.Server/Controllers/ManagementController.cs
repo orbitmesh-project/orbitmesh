@@ -212,8 +212,22 @@ public sealed class ManagementController(
         !string.IsNullOrEmpty(credentialName)
         && options.CurrentValue.Credentials.Any(c => c.Kind == CredentialKind.Token && c.Name.Equals(credentialName, StringComparison.OrdinalIgnoreCase));
 
-    private HashSet<string> CallerScopes() =>
-        directory.FindCredential(HttpContext.GetEffectiveAccessKey())?.Scopes.ToHashSet(StringComparer.Ordinal) ?? [];
+    private HashSet<string> CallerScopes()
+    {
+        var scopes = directory.FindCredential(HttpContext.GetEffectiveAccessKey())?.Scopes.ToHashSet(StringComparer.Ordinal) ?? [];
+        // edge:connect and package:connect are not something a person holds (OrbitMeshScope.MachineOnly): they are what an
+        // Edge's or a package's own credential carries. Whoever may manage edges (or packages) may hand them to those
+        // credentials - approving an Edge, resetting its key - so they count as held, or nobody could.
+        if (scopes.Contains(OrbitMeshScope.EdgesWrite))
+        {
+            scopes.Add(OrbitMeshScope.EdgeConnect);
+        }
+        if (scopes.Contains(OrbitMeshScope.PackagesManage))
+        {
+            scopes.Add(OrbitMeshScope.PackageConnect);
+        }
+        return scopes;
+    }
 
     // credentials:manage and configuration:write would otherwise amount to root: a holder could grant itself
     // (or anyone) any scope, or take over a more privileged credential by replacing its key. The rule is the

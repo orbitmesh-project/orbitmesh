@@ -6,8 +6,11 @@ namespace OrbitMesh.Server.Tests.Harness;
 
 /// <summary>Who is calling, expressed the way the wire carries it: the EdgeName/PackageName/AccessKey headers,
 /// and/or the Console's session cookie.</summary>
-public sealed record Caller(string? EdgeName = null, string? PackageName = "test", string? AccessKey = null, string? SessionToken = null, string? Origin = null)
+public sealed record Caller(string? EdgeName = null, string? PackageName = "test", string? AccessKey = null, string? SessionToken = null, string? Origin = null, string? Authorization = null)
 {
+    /// <summary>A script calling the API the standard way: <c>Authorization: Bearer &lt;key&gt;</c>, and no names at all unless given.</summary>
+    public static Caller Bearer(string key, string? edge = null, string? package = null) => new(edge, package, Authorization: "Bearer " + key);
+
     public static Caller Anonymous(string edge) => new(edge);
 
     public static Caller Key(string edge, string accessKey, string package = "test") => new(edge, package, accessKey);
@@ -59,6 +62,10 @@ public sealed class Api(ServerFixture server, string ip)
         if (caller.AccessKey != null)
         {
             request.Headers.TryAddWithoutValidation("AccessKey", caller.AccessKey);
+        }
+        if (caller.Authorization != null)
+        {
+            request.Headers.TryAddWithoutValidation("Authorization", caller.Authorization);
         }
         if (caller.SessionToken != null)
         {

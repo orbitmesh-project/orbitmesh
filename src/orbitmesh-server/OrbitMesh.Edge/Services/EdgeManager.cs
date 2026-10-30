@@ -117,11 +117,11 @@ public sealed class EdgeManager(IOptions<EdgeOptions> optionsAccessor, ILogger<E
 
         if (!await TryConnectAsync(cancellationToken))
         {
-            // Not yet approved (or the server/network is briefly unreachable). The Server aborts an
-            // unauthorized connection right after the handshake, so StartAsync itself usually succeeds
-            // and it's the first call (RegisterEdge) that fails - which is why this keys off
-            // TryConnectAsync's result rather than an exception. Poll rest/enroll instead, forever; it
-            // falls back to retrying the SignalR connection if the server says it already knows us.
+            // Not yet approved (or the server/network is briefly unreachable). The Server refuses an
+            // unauthorized caller when the connection is negotiated (HTTP 403), so StartAsync throws
+            // - TryConnectAsync turns that, and a failed RegisterEdge, into this single "not connected"
+            // result. Poll rest/enroll instead, forever; it falls back to retrying the SignalR
+            // connection if the server says it already knows us.
             logger.LogWarning("Not connected to the OrbitMesh server - falling back to REST enrollment (not yet approved, or the server is unreachable).");
             _ = EnrollAndPollAsync(_cts.Token);
         }
@@ -151,7 +151,7 @@ public sealed class EdgeManager(IOptions<EdgeOptions> optionsAccessor, ILogger<E
     }
 
     // True once connected AND registered. On failure the connection is stopped so it can't sit in
-    // WithOrbitMeshDefaults()'s endless reconnect loop (each attempt would be aborted again by the
+    // WithOrbitMeshDefaults()'s endless reconnect loop (each attempt would be refused again by the
     // Server) while the REST enrollment path takes over.
     private async Task<bool> TryConnectAsync(CancellationToken cancellationToken)
     {
@@ -262,7 +262,7 @@ public sealed class EdgeManager(IOptions<EdgeOptions> optionsAccessor, ILogger<E
                 // already-applied approval means the same: the original connect failure was likely
                 // transient (e.g. the server was down at boot) rather than a missing approval - try the
                 // normal connection again. Throttled to once a minute: if the AccessKey or name on disk
-                // really is wrong every attempt is aborted, and the Server counts each one toward its
+                // really is wrong every attempt is refused, and the Server counts each one toward its
                 // failed-attempt lockout (10 per 5 minutes per IP), which this must stay well under.
                 if ((response?.Status == EnrollmentStatus.Rejected || alreadyApplied) && DateTime.UtcNow - lastConnectAttemptUtc > TimeSpan.FromSeconds(60))
                 {
@@ -489,7 +489,7 @@ public sealed class EdgeManager(IOptions<EdgeOptions> optionsAccessor, ILogger<E
     }
 
     // Returns whether the Server accepted the registration. A false is no longer retried here: the
-    // Server aborts unauthorized connections outright, so a refusal means the credential isn't
+    // Server refuses unauthorized callers outright (HTTP 403 when the connection is negotiated), so a refusal means the credential isn't
     // accepted and REST enrollment (EnrollAndPollAsync) is the retry path.
     private async Task<bool> RegisterAsync()
     {

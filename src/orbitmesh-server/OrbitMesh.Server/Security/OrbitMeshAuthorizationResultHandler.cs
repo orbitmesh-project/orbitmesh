@@ -38,7 +38,13 @@ public sealed class OrbitMeshAuthorizationResultHandler(
             return;
         }
 
-        metrics.AccessChecked();
+        // A hub connection is many requests (negotiate, then a socket or a poll loop): count the negotiation only.
+        var countsAsAccess = !context.Request.Path.StartsWithSegments("/signalr", StringComparison.OrdinalIgnoreCase)
+            || context.Request.Path.Value?.EndsWith("/negotiate", StringComparison.OrdinalIgnoreCase) == true;
+        if (countsAsAccess)
+        {
+            metrics.AccessChecked();
+        }
         if (state.CsrfRefused)
         {
             metrics.AccessDenied();
@@ -53,7 +59,10 @@ public sealed class OrbitMeshAuthorizationResultHandler(
 
         if (doorPassed)
         {
-            metrics.AccessGranted();
+            if (countsAsAccess)
+            {
+                metrics.AccessGranted();
+            }
             usageTracker.RecordUse(state.CredentialName);
             if (door?.AccessType == OrbitMeshAccessType.Management && MutatingMethods.Contains(context.Request.Method))
             {

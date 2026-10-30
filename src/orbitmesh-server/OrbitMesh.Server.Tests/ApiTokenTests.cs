@@ -284,13 +284,16 @@ public sealed class ApiTokenTests(ServerFixture server) : IClassFixture<ServerFi
     public async Task A_token_stops_working_at_its_expiry()
     {
         var (api, admin) = await AdminAsync();
-        var token = await CreateAsync(api, admin, expires: DateTimeOffset.UtcNow.AddSeconds(3));
+        // Long enough for a slow machine to create the token and use it once; the wait below is computed, not fixed.
+        var expires = DateTimeOffset.UtcNow.AddSeconds(10);
+        var token = await CreateAsync(api, admin, expires: expires);
         using (var before = await UseAsync(api, token))
         {
-            Assert.Equal(HttpStatusCode.OK, before.StatusCode);
+            Assert.True(before.StatusCode == HttpStatusCode.OK, "the token should work until it expires - the machine was too slow to use it within 10 seconds");
         }
 
-        await Task.Delay(TimeSpan.FromSeconds(3.5));
+        var remaining = expires - DateTimeOffset.UtcNow;
+        await Task.Delay(remaining > TimeSpan.Zero ? remaining + TimeSpan.FromMilliseconds(500) : TimeSpan.Zero);
 
         using var after = await UseAsync(api, token);
         Assert.Equal(HttpStatusCode.Forbidden, after.StatusCode);

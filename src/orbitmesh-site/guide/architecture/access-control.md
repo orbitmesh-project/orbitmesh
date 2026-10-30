@@ -106,6 +106,8 @@ Layers 4 and 5 are the same two-level model as AWS IAM: a scope authorizes an *a
 | The `Developer` edge | Local development | A key holding `developer` | REST only | No | No |
 | `/packages/{file}` (package zips) | An Edge fetching its packages | The Edge's own credential (`EdgeName` = that Edge, `PackageName` = `Edge`, with `edge:connect`), or any key holding `packages:read` | With `packages:read` | With `packages:read` | With `packages:read` |
 
+Each hub is authorized when its connection is negotiated, by the same door rules: a caller that is refused gets an HTTP 403 (429 while its address is locked out) and never a connection.
+
 A few doors are open **on purpose**, each bounded: `/rest/enroll` (an Edge asking to be approved), `/rest/management/setup/*` (first run only), `/rest/auth/*` (sign-in), static sites under a `FileServers` path, and `/metrics` (Prometheus). Anything you don't want public - `/metrics`, or a site that stores a key in its own config file - belongs behind `localhostOnly`, your reverse proxy or a firewall.
 
 ## Four kinds of identity
@@ -130,7 +132,15 @@ Prefer an **API token** to a Machine key for anything that is not an Edge or a p
 - It can **expire**, can be **rotated** (new secret, old one dead at once, same name, scopes and rules) and **revoked** on its own like any credential.
 - It can never hold `edge:connect` or `package:connect`, and it is refused at an Edge's or a package's own door.
 
-It is sent exactly like any AccessKey (`AccessKey` header, or the query string where a header can't be set). Existing Machine keys keep working; nothing is migrated.
+Send it the standard way, as a bearer token, and nothing else:
+
+```bash
+curl -H "Authorization: Bearer omk_…" https://orbitmesh.example.com/rest/management/edges
+```
+
+A caller that presents a key and names neither `EdgeName` nor `PackageName` is judged at the door of the endpoint it calls (`/rest/management`, `/rest/controller` or `/rest/consumer`) - it could have named that door itself, so nothing is widened. Edges and packages still name themselves (which Edge's door is it?), and a browser session keeps sending its identity headers. The older forms keep working: the `AccessKey` header or query string, with `EdgeName` and `PackageName`; when both an `AccessKey` and a bearer token are sent, the `AccessKey` is the one used. On a SignalR hub URL, the `access_token` query parameter that SignalR sends where a transport can't set headers is accepted too - but not on REST URLs, where a key would end up in logs.
+
+Existing Machine keys keep working; nothing is migrated.
 
 ## Scopes
 

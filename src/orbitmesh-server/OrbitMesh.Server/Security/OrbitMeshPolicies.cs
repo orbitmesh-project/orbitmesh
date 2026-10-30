@@ -15,6 +15,12 @@ public static class OrbitMeshPolicies
     /// <summary>Downloading a package's zip from <c>/packages/...</c>.</summary>
     public const string PackageDownload = "door:package-download";
 
+    // The SignalR hubs, authorized when the connection is negotiated: a refused caller never gets a connection.
+    public const string ConsumerHub = "hub:consumer";
+    public const string ControlHub = "hub:control";
+    public const string EdgeHub = "hub:edge";
+    public const string PackageHub = "hub:package";
+
     private const string ScopePrefix = "scope:";
     private const char ScopeSeparator = '|';
 
@@ -32,8 +38,8 @@ public static class OrbitMeshPolicies
         return true;
     }
 
-    public static AuthorizationPolicy Door(OrbitMeshAccessType accessType) =>
-        new AuthorizationPolicyBuilder().AddRequirements(new DoorRequirement(accessType)).Build();
+    public static AuthorizationPolicy Door(OrbitMeshAccessType accessType, string? fixedName = null, string? requiredScope = null) =>
+        new AuthorizationPolicyBuilder().AddRequirements(new DoorRequirement(accessType, fixedName, requiredScope)).Build();
 }
 
 /// <summary>A requirement about <i>getting in</i> (as opposed to what you may do once in): its refusal is a refusal of the
@@ -45,9 +51,15 @@ public interface IDoorRequirement : IAuthorizationRequirement
 
 /// <summary>The caller must be let in through this kind of door: the rules of <c>IOrbitMeshDirectory.CheckAccess</c>
 /// (which credential may use which EdgeName, whether it holds a scope at all, sessions only on the Console's doors...).</summary>
-public sealed class DoorRequirement(OrbitMeshAccessType accessType) : IDoorRequirement
+public sealed class DoorRequirement(OrbitMeshAccessType accessType, string? fixedName = null, string? requiredScope = null) : IDoorRequirement
 {
     public OrbitMeshAccessType AccessType { get; } = accessType;
+
+    /// <summary>A door that is judged by this name (as EdgeName and PackageName) whatever the caller says - the Consumer hub.</summary>
+    public string? FixedName { get; } = fixedName;
+
+    /// <summary>A scope the caller must hold just to be let in (an Edge's or a package's connection scope), on top of the door's own rules.</summary>
+    public string? RequiredScope { get; } = requiredScope;
 }
 
 /// <summary>

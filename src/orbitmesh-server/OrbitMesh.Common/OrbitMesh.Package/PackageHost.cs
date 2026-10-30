@@ -239,7 +239,18 @@ public static class PackageHost
             }
         };
 
-        await _connection.StartAsync(cancellationToken);
+        try
+        {
+            await _connection.StartAsync(cancellationToken);
+        }
+        catch (HttpRequestException ex) when (ex.StatusCode is System.Net.HttpStatusCode.Forbidden or System.Net.HttpStatusCode.TooManyRequests)
+        {
+            // The Server refuses a caller when the connection is negotiated (it used to accept it and close it a moment
+            // later). Say what that means, instead of leaving a bare "Response status code does not indicate success".
+            throw new InvalidOperationException(
+                $"The OrbitMesh server refused the connection (HTTP {(int)ex.StatusCode}). Check the edge name, the package name and the access key this package was started with"
+                + (ex.StatusCode == System.Net.HttpStatusCode.TooManyRequests ? ", and whether this address is locked out after too many failed attempts." : "."), ex);
+        }
         IsConnected = true;
         connectionHeaders![OrbitMeshHeaderNames.IsReconnection] = bool.TrueString;
         OnConnectedOrReconnected();

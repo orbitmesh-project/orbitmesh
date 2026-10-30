@@ -4,6 +4,15 @@ Format: [Keep a Changelog](https://keepachangelog.com/). Versions match `<Versio
 `OrbitMesh.Common.csproj`, which is what gets published to
 [nuget.org](https://www.nuget.org/packages/OrbitMesh.Common).
 
+## [1.2.7]
+
+### Changed
+
+- `PackageHost` reports a refused connection clearly. A Server (1.5.0 and later) refuses a caller it does not accept
+  when the connection is negotiated - HTTP 403, or 429 while the address is locked out - instead of accepting it and
+  closing it; the first connection now fails with "The OrbitMesh server refused the connection (HTTP 403). Check the
+  edge name, the package name and the access key this package was started with." rather than a bare status error.
+
 ## [1.2.6]
 
 ### Security

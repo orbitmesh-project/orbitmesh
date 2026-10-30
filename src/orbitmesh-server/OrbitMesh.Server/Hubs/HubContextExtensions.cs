@@ -6,8 +6,6 @@ namespace OrbitMesh.Server.Hubs;
 
 public static class HubContextExtensions
 {
-    internal const string PresentedAccessKeyItem = "OrbitMesh.PresentedAccessKey";
-
     /// <summary>
     /// Captures EdgeName/PackageName/AccessKey (and related metadata) from the connection's initial
     /// HTTP request (header or querystring) into <see cref="HubCallerContext.Items"/>, so later hub method
@@ -24,11 +22,9 @@ public static class HubContextExtensions
         // Same rule as the REST middleware: the presented AccessKey, else the Console's session cookie (the
         // browser sends it on the WebSocket handshake). Only the Console hubs accept the latter - see
         // IOrbitMeshDirectory.CheckAccess.
-        var presentedKey = false;
         context.Items[OrbitMeshHeaderNames.AccessKey] = http == null
             ? null
-            : CallerKeys.FromRequest(http.Request, http.RequestServices.GetRequiredService<SessionStore>(), out presentedKey);
-        context.Items[PresentedAccessKeyItem] = presentedKey;
+            : CallerKeys.FromRequest(http.Request, http.RequestServices.GetRequiredService<SessionStore>(), out _);
         context.Items[OrbitMeshHeaderNames.OrbitMeshClientVersion] = Get(OrbitMeshHeaderNames.OrbitMeshClientVersion);
         context.Items[OrbitMeshHeaderNames.OrbitMeshClientType] = Get(OrbitMeshHeaderNames.OrbitMeshClientType);
         context.Items[OrbitMeshHeaderNames.PackageVersion] = Get(OrbitMeshHeaderNames.PackageVersion);

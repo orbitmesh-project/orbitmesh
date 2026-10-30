@@ -80,6 +80,12 @@ builder.Services.AddAuthorization(o =>
     o.AddPolicy(OrbitMeshPolicies.ManagementDoor, OrbitMeshPolicies.Door(OrbitMeshAccessType.Management));
     o.AddPolicy(OrbitMeshPolicies.ControllerDoor, OrbitMeshPolicies.Door(OrbitMeshAccessType.Controller));
     o.AddPolicy(OrbitMeshPolicies.OrbitMeshDoor, OrbitMeshPolicies.Door(OrbitMeshAccessType.OrbitMesh));
+    // The hubs: the Consumer hub is judged by its own name whatever the caller says; an Edge or a package must also
+    // hold the scope that lets it connect as one.
+    o.AddPolicy(OrbitMeshPolicies.ConsumerHub, OrbitMeshPolicies.Door(OrbitMeshAccessType.OrbitMesh, fixedName: OrbitMeshDefaultNames.ConsumerEdgeName));
+    o.AddPolicy(OrbitMeshPolicies.ControlHub, OrbitMeshPolicies.Door(OrbitMeshAccessType.Controller));
+    o.AddPolicy(OrbitMeshPolicies.EdgeHub, OrbitMeshPolicies.Door(OrbitMeshAccessType.OrbitMesh, requiredScope: OrbitMeshScope.EdgeConnect));
+    o.AddPolicy(OrbitMeshPolicies.PackageHub, OrbitMeshPolicies.Door(OrbitMeshAccessType.OrbitMesh, requiredScope: OrbitMeshScope.PackageConnect));
     o.AddPolicy(OrbitMeshPolicies.PackageDownload, new AuthorizationPolicyBuilder().AddRequirements(new PackageDownloadRequirement()).Build());
     o.FallbackPolicy = OrbitMeshPolicies.Door(OrbitMeshAccessType.OrbitMesh);
 });
@@ -299,12 +305,12 @@ app.UseAuthorization();
 
 app.MapMethods("/packages/{**file}", ["GET", "HEAD"], PackageFileEndpoint.Handle).RequireAuthorization(OrbitMeshPolicies.PackageDownload);
 
-// Hubs decide for themselves in OnConnectedAsync (with the right door for each, and by aborting the connection
-// rather than failing the negotiation, which is what the Edge and the SDKs expect), so they are not gated here.
-app.MapHub<OrbitMeshHub>("/signalr/hubs/" + OrbitMeshHubNames.OrbitMesh).AllowAnonymous();
-app.MapHub<EdgeHub>("/signalr/hubs/" + OrbitMeshHubNames.Edge).AllowAnonymous();
-app.MapHub<ConsumerHub>("/signalr/hubs/" + OrbitMeshHubNames.Consumer).AllowAnonymous();
-app.MapHub<ControlHub>("/signalr/hubs/" + OrbitMeshHubNames.Control).AllowAnonymous();
+// Each hub is authorized when the connection is negotiated, with the same door rules as the REST API: a refused caller
+// gets an HTTP 403 (429 when locked out) and never a connection.
+app.MapHub<OrbitMeshHub>("/signalr/hubs/" + OrbitMeshHubNames.OrbitMesh).RequireAuthorization(OrbitMeshPolicies.PackageHub);
+app.MapHub<EdgeHub>("/signalr/hubs/" + OrbitMeshHubNames.Edge).RequireAuthorization(OrbitMeshPolicies.EdgeHub);
+app.MapHub<ConsumerHub>("/signalr/hubs/" + OrbitMeshHubNames.Consumer).RequireAuthorization(OrbitMeshPolicies.ConsumerHub);
+app.MapHub<ControlHub>("/signalr/hubs/" + OrbitMeshHubNames.Control).RequireAuthorization(OrbitMeshPolicies.ControlHub);
 
 // A client-side-routed SPA (FileServerOptions.IsSpa) needs any sub-path that isn't a real file
 // (e.g. /console-next/packages) to fall back to index.html so the router can resolve it - only

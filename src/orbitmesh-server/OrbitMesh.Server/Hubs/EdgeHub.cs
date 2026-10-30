@@ -13,8 +13,6 @@ public sealed class EdgeHub(
     OrbitMeshMetrics metrics,
     OrbitMeshLogService packageLog,
     IHubContext<ControlHub> controlHub,
-    CredentialUsageTracker usageTracker,
-    LoginAttemptLimiter attemptLimiter,
     ILogger<EdgeHub> logger) : Hub
 {
     // CheckAccess alone doesn't require any scope for this access type (see IOrbitMeshDirectory.CanAccess) -
@@ -25,47 +23,26 @@ public sealed class EdgeHub(
 
     public override async Task OnConnectedAsync()
     {
+        // Who may connect (the credential assigned to this Edge, holding edge:connect) was decided when the connection was
+        // negotiated - OrbitMeshPolicies.EdgeHub, mapped in Program.cs.
         Context.CaptureConnectionMetadata();
-        if (Context.IsLockedOut(attemptLimiter))
-        {
-            metrics.AccessDenied();
-            Context.Abort();
-            return;
-        }
-        if (IsAuthorized())
-        {
-            // Picked up its approved key and reconnected for real - drop the plaintext key still held
-            // for pickup. Only when the InstanceId is the one configured for THIS Edge name: the
-            // header is client-supplied, so any authorized Edge could otherwise delete another
-            // Edge's pending/approved entry by claiming its InstanceId.
-            var connectedEdgeName = Context.GetEdgeName();
-            if (Context.GetInstanceId() is { Length: > 0 } connectedInstanceId
-                && directory.Current.Edges.Any(e => e.Name.Equals(connectedEdgeName, StringComparison.OrdinalIgnoreCase)
-                    && string.Equals(e.InstanceId, connectedInstanceId, StringComparison.OrdinalIgnoreCase)))
-            {
-                pendingEdgeRegistry.Remove(connectedInstanceId);
-            }
-            metrics.AccessGranted();
-            metrics.EdgeConnected();
-            usageTracker.RecordUse(directory.GetCredentialName(Context.GetAccessKey()));
-            packageLog.Log(Context.GetEdgeName(), Context.GetPackageName(),
-                $"Edge connected to server (connectionId='{Context.ConnectionId}')",
-                LogLevel.Info);
-            await base.OnConnectedAsync();
-            return;
-        }
 
-        metrics.AccessDenied();
-        Context.RecordFailure(attemptLimiter, logger);
-        // Not (yet) authorized - reject outright rather than keeping the connection open. An
-        // unapproved/misconfigured Edge now falls back to REST enrollment (EnrollmentController)
-        // instead of waiting on this connection for an approval push.
-        logger.LogWarning(
-            "EdgeHub connection rejected for EdgeName={EdgeName}. " +
-            "Add a matching entry under OrbitMesh:Edges in appsettings.json with a valid Credential, " +
-            "or wait for its REST enrollment (rest/enroll) to be approved from the Console.",
-            Context.GetEdgeName().ForLog());
-        Context.Abort();
+        // Picked up its approved key and reconnected for real - drop the plaintext key still held
+        // for pickup. Only when the InstanceId is the one configured for THIS Edge name: the
+        // header is client-supplied, so any authorized Edge could otherwise delete another
+        // Edge's pending/approved entry by claiming its InstanceId.
+        var connectedEdgeName = Context.GetEdgeName();
+        if (Context.GetInstanceId() is { Length: > 0 } connectedInstanceId
+            && directory.Current.Edges.Any(e => e.Name.Equals(connectedEdgeName, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(e.InstanceId, connectedInstanceId, StringComparison.OrdinalIgnoreCase)))
+        {
+            pendingEdgeRegistry.Remove(connectedInstanceId);
+        }
+        metrics.EdgeConnected();
+        packageLog.Log(Context.GetEdgeName(), Context.GetPackageName(),
+            $"Edge connected to server (connectionId='{Context.ConnectionId}')",
+            LogLevel.Info);
+        await base.OnConnectedAsync();
     }
 
     public override async Task OnDisconnectedAsync(Exception? exception)

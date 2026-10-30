@@ -12,31 +12,15 @@ public sealed class ConsumerHub(
     OrbitMeshMetrics metrics,
     IHubContext<OrbitMeshHub> orbitmeshHub,
     IHubContext<ConsumerHub> selfHub,
-    CredentialUsageTracker usageTracker,
     SagaRegistry sagaRegistry,
-    LoginAttemptLimiter attemptLimiter,
     ILogger<ConsumerHub> logger) : Hub
 {
+    // Who may connect was decided when the connection was negotiated (OrbitMeshPolicies.ConsumerHub, mapped in
+    // Program.cs): a refused caller never gets here. This only keeps what the later calls read.
     public override Task OnConnectedAsync()
     {
         Context.CaptureConnectionMetadata();
-        if (Context.IsLockedOut(attemptLimiter))
-        {
-            metrics.AccessDenied();
-            Context.Abort();
-            return Task.CompletedTask;
-        }
-        if (!directory.CheckAccess(OrbitMeshDefaultNames.ConsumerEdgeName, OrbitMeshDefaultNames.ConsumerEdgeName, Context.GetAccessKey(), OrbitMeshAccessType.OrbitMesh))
-        {
-            metrics.AccessDenied();
-            Context.RecordFailure(attemptLimiter, logger);
-            logger.LogWarning("ConsumerHub connection rejected: no enabled credential matches the supplied AccessKey.");
-            Context.Abort();
-            return Task.CompletedTask;
-        }
-        metrics.AccessGranted();
         metrics.ConsumerConnected();
-        usageTracker.RecordUse(directory.GetCredentialName(Context.GetAccessKey()));
         return base.OnConnectedAsync();
     }
 
