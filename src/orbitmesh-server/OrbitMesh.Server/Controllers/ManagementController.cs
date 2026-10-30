@@ -204,6 +204,10 @@ public sealed class ManagementController(
         return Ok();
     }
 
+    private bool IsToken(string? credentialName) =>
+        !string.IsNullOrEmpty(credentialName)
+        && options.CurrentValue.Credentials.Any(c => c.Kind == CredentialKind.Token && c.Name.Equals(credentialName, StringComparison.OrdinalIgnoreCase));
+
     private HashSet<string> CallerScopes() =>
         directory.FindCredential(HttpContext.GetEffectiveAccessKey())?.Scopes.ToHashSet(StringComparer.Ordinal) ?? [];
 
@@ -220,7 +224,7 @@ public sealed class ManagementController(
     }
 
     private static bool CredentialDiffers(CredentialOptions a, CredentialOptions b) =>
-        a.AccessKey != b.AccessKey || a.Kind != b.Kind || a.Enable != b.Enable
+        a.AccessKey != b.AccessKey || a.Kind != b.Kind || a.Enable != b.Enable || a.TokenId != b.TokenId || a.ExpiresUtc != b.ExpiresUtc
         || !a.Scopes.Order(StringComparer.Ordinal).SequenceEqual(b.Scopes.Order(StringComparer.Ordinal));
 
     // Guards for the raw-configuration editor, which can otherwise rewrite anything the typed endpoints
@@ -245,12 +249,35 @@ public sealed class ManagementController(
                 return delegation;
             }
             var keyChanged = existing == null || existing.AccessKey != credential.AccessKey;
-            var plaintext = credential.Kind == CredentialKind.Human
-                ? !AccessKeyHasher.IsHashed(credential.AccessKey) && !PasswordHasher.IsHashed(credential.AccessKey)
-                : !AccessKeyCipher.IsEncrypted(credential.AccessKey);
+            var plaintext = credential.Kind switch
+            {
+                CredentialKind.Human => !AccessKeyHasher.IsHashed(credential.AccessKey) && !PasswordHasher.IsHashed(credential.AccessKey),
+                CredentialKind.Token => !ApiTokens.IsHashed(credential.AccessKey),
+                _ => !AccessKeyCipher.IsEncrypted(credential.AccessKey)
+            };
+            // A token is only ever made by the Server (it has to be unguessable and shaped right): hand-writing one
+            // here would mean choosing its secret, or none at all.
+            if (credential.Kind == CredentialKind.Token && keyChanged)
+            {
+                return BadRequest($"The token '{credential.Name}' can't be created or replaced through the configuration editor - create or rotate it on the Credentials page.");
+            }
+            if (credential.Kind == CredentialKind.Token && credential.Scopes.Any(OrbitMeshScope.MachineOnly.Contains))
+            {
+                return BadRequest($"The token '{credential.Name}' can't hold edge:connect or package:connect - those are for Edge and package credentials.");
+            }
             if (keyChanged && plaintext)
             {
                 return BadRequest($"The AccessKey of '{credential.Name}' can't be written in plaintext through the configuration editor - set it with the Credentials page so it's hashed/encrypted.");
+            }
+        }
+        var tokenNames = candidate.Credentials.Where(c => c.Kind == CredentialKind.Token).Select(c => c.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        foreach (var edge in candidate.Edges)
+        {
+            var usingToken = new[] { edge.Credential }.Concat(edge.Packages.Select(p => p.Credential))
+                .FirstOrDefault(name => !string.IsNullOrEmpty(name) && tokenNames.Contains(name));
+            if (usingToken != null)
+            {
+                return BadRequest($"The token '{usingToken}' can't be the credential of the edge '{edge.Name}' or of one of its packages - they need a Machine credential.");
             }
         }
         foreach (var removed in current.Credentials.Where(c => !candidate.Credentials.Any(n => n.Name.Equals(c.Name, StringComparison.OrdinalIgnoreCase))))
@@ -335,6 +362,10 @@ public sealed class ManagementController(
         if (!options.CurrentValue.Credentials.Any(c => c.Name.Equals(edge.Credential, StringComparison.OrdinalIgnoreCase)))
         {
             return NotFound($"The credential '{edge.Credential}' does not exist");
+        }
+        if (IsToken(edge.Credential))
+        {
+            return BadRequest($"'{edge.Credential}' is an API token: an edge needs a Machine credential.");
         }
         configWriter.Update(cfg =>
         {
@@ -520,6 +551,10 @@ public sealed class ManagementController(
         if (!IsValidPackageName(package.Name))
         {
             return BadRequest($"Invalid package name '{package.Name}'");
+        }
+        if (IsToken(package.Credential))
+        {
+            return BadRequest($"'{package.Credential}' is an API token: a package needs a Machine credential.");
         }
         configWriter.Update(cfg =>
         {
@@ -943,6 +978,10 @@ public sealed class ManagementController(
             c.Kind,
             c.Enable,
             c.Scopes,
+            // The public part of a token and its expiry - never the hash (which is masked anyway, see
+            // ConfigurationRedactor) and never anything of the secret.
+            c.TokenId,
+            c.ExpiresUtc,
             LastUsedUtc = credentialUsageTracker.GetLastUsed(c.Name) is { } live && (c.LastUsedUtc == null || live > c.LastUsedUtc.Value.UtcDateTime)
                 ? new DateTimeOffset(live, TimeSpan.Zero)
                 : c.LastUsedUtc
@@ -967,6 +1006,11 @@ public sealed class ManagementController(
             return BadRequest($"Credential names can't start with '{OidcRoleMapper.SessionNamePrefix}' - that prefix is reserved for single-sign-on users.");
         }
         var existingNow = options.CurrentValue.Credentials.FirstOrDefault(c => c.Name.Equals(credential.Name, StringComparison.OrdinalIgnoreCase));
+        var tokenProblem = CheckTokenEdit(credential, existingNow);
+        if (tokenProblem != null)
+        {
+            return tokenProblem;
+        }
         // Read before the update below, which overwrites AccessKey with the stored form either way.
         var setsNewSecret = !string.IsNullOrEmpty(credential.AccessKey);
         var delegation = CheckScopeDelegation(credential.Scopes.Concat(existingNow?.Scopes ?? []), $"create or change the credential '{credential.Name}'");
@@ -981,6 +1025,15 @@ public sealed class ManagementController(
             {
                 credential.Authorizations = existing.Authorizations;
                 credential.LastUsedUtc = existing.LastUsedUtc;
+                if (existing.Kind == CredentialKind.Token)
+                {
+                    // Flags, scopes and expiry are editable; the identity and the secret are not (rotate for that).
+                    credential.TokenId = existing.TokenId;
+                    credential.AccessKey = existing.AccessKey;
+                    cfg.Credentials.Remove(existing);
+                    cfg.Credentials.Add(credential);
+                    return;
+                }
                 // A blank AccessKey means "editing roles/flags only, leave the key alone" - the console
                 // never has a real key to resubmit for either kind (see GetCredentials above), and this
                 // also means re-saving a credential's other fields can't accidentally wipe its key.
@@ -1000,6 +1053,136 @@ public sealed class ManagementController(
             sessions.RevokeAllFor(credential.Name, CallerKeys.SessionIdOf(HttpContext.GetEffectiveAccessKey()));
         }
         return Ok();
+    }
+
+    // A token is made by the Server (CreateToken) and its secret replaced by RotateToken; this ordinary save is only
+    // for what can change without touching the secret: enable, scopes, expiry.
+    private IActionResult? CheckTokenEdit(CredentialOptions credential, CredentialOptions? existing)
+    {
+        var existingIsToken = existing?.Kind == CredentialKind.Token;
+        if (credential.Kind != CredentialKind.Token && !existingIsToken)
+        {
+            return null;
+        }
+        if (credential.Kind != CredentialKind.Token)
+        {
+            return BadRequest("A token can't be turned into another kind of credential.");
+        }
+        if (existing == null)
+        {
+            return BadRequest("A token is created with POST credentials/tokens, which generates its secret.");
+        }
+        if (!existingIsToken)
+        {
+            return BadRequest("An existing credential can't be turned into a token - create a token instead.");
+        }
+        if (!string.IsNullOrEmpty(credential.AccessKey))
+        {
+            return BadRequest("A token's secret can't be chosen - rotate the token to get a new one.");
+        }
+        if (credential.Scopes.Any(OrbitMeshScope.MachineOnly.Contains))
+        {
+            return BadRequest("A token can't hold edge:connect or package:connect - those are for Edge and package credentials.");
+        }
+        return null;
+    }
+
+    public sealed record CreateTokenRequest(string? Name, List<string>? Scopes = null, DateTimeOffset? ExpiresUtc = null, bool Enable = true);
+
+    /// <summary>Creates an API token. The Server generates it, so it is unguessable and well-formed, and returns it
+    /// <b>once</b>: only its hash is kept, so there is no way to show it again (rotate to get another).</summary>
+    [HttpPost("credentials/tokens")]
+    [RequiresScope(OrbitMeshScope.CredentialsManage)]
+    public IActionResult CreateToken([FromBody] CreateTokenRequest request)
+    {
+        var name = request.Name?.Trim();
+        if (string.IsNullOrEmpty(name) || name.Length > 128)
+        {
+            return BadRequest("A name is required (128 characters at most).");
+        }
+        if (name.StartsWith(OidcRoleMapper.SessionNamePrefix, StringComparison.OrdinalIgnoreCase))
+        {
+            return BadRequest($"Credential names can't start with '{OidcRoleMapper.SessionNamePrefix}' - that prefix is reserved for single-sign-on users.");
+        }
+        var scopes = (request.Scopes ?? []).Distinct(StringComparer.Ordinal).ToList();
+        var notForTokens = scopes.Where(s => !OrbitMeshScope.ForPeople.Contains(s)).Order().ToList();
+        if (notForTokens.Count > 0)
+        {
+            return BadRequest($"A token can't hold these scopes (unknown, or only for Edge and package credentials): {string.Join(", ", notForTokens)}.");
+        }
+        if (request.ExpiresUtc is { } expires && expires <= DateTimeOffset.UtcNow)
+        {
+            return BadRequest("The expiry must be in the future.");
+        }
+        var delegation = CheckScopeDelegation(scopes, $"create the token '{name}'");
+        if (delegation != null)
+        {
+            return delegation;
+        }
+
+        var token = ApiTokens.Generate();
+        var created = false;
+        configWriter.Update(cfg =>
+        {
+            // Re-checked inside the writer lock: two requests for the same name must not both succeed.
+            if (cfg.Credentials.Any(c => c.Name.Equals(name, StringComparison.OrdinalIgnoreCase)))
+            {
+                return;
+            }
+            cfg.Credentials.Add(new CredentialOptions
+            {
+                Name = name,
+                AccessKey = token.Stored,
+                Kind = CredentialKind.Token,
+                Enable = request.Enable,
+                Scopes = scopes,
+                TokenId = token.Id,
+                ExpiresUtc = request.ExpiresUtc
+            });
+            created = true;
+        });
+        return created
+            ? Ok(new { Name = name, TokenId = token.Id, Token = token.Token, request.ExpiresUtc })
+            : Conflict($"A credential named '{name}' already exists.");
+    }
+
+    /// <summary>Replaces a token's secret (and id) with new ones, returned once. The old token stops working as soon
+    /// as the configuration reloads; the scopes, expiry and rules stay.</summary>
+    [HttpPost("credentials/{name}/rotate")]
+    [RequiresScope(OrbitMeshScope.CredentialsManage)]
+    public IActionResult RotateToken(string name)
+    {
+        var existing = options.CurrentValue.Credentials.FirstOrDefault(c => c.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
+        if (existing == null)
+        {
+            return NotFound();
+        }
+        if (existing.Kind != CredentialKind.Token)
+        {
+            return BadRequest("Only a token is rotated; any other credential is reset by editing it.");
+        }
+        var delegation = CheckScopeDelegation(existing.Scopes, $"rotate the token '{existing.Name}'");
+        if (delegation != null)
+        {
+            return delegation;
+        }
+
+        var token = ApiTokens.Generate();
+        var rotated = false;
+        configWriter.Update(cfg =>
+        {
+            var target = cfg.Credentials.FirstOrDefault(c => c.Kind == CredentialKind.Token && c.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
+            if (target == null)
+            {
+                return;
+            }
+            target.AccessKey = token.Stored;
+            target.TokenId = token.Id;
+            rotated = true;
+        });
+        return rotated
+            ? Ok(new { existing.Name, TokenId = token.Id, Token = token.Token, existing.ExpiresUtc })
+            : NotFound();
     }
 
     public sealed record SetupStatus(bool NeedsSetup);

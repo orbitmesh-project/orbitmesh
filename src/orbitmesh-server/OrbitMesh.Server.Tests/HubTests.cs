@@ -1,5 +1,3 @@
-using Microsoft.AspNetCore.Http.Connections;
-using Microsoft.AspNetCore.SignalR.Client;
 using OrbitMesh;
 using OrbitMesh.Server.Tests.Harness;
 
@@ -10,9 +8,6 @@ namespace OrbitMesh.Server.Tests;
 /// later; "rejected" means the Server closed it.</summary>
 public sealed class HubTests(ServerFixture server) : IClassFixture<ServerFixture>
 {
-    private static readonly TimeSpan AcceptedWindow = TimeSpan.FromMilliseconds(900);
-    private static readonly TimeSpan RejectedDeadline = TimeSpan.FromSeconds(5);
-
     // --- Consumer hub: any enabled credential, or any person's session that holds a scope.
 
     [Fact]
@@ -109,48 +104,5 @@ public sealed class HubTests(ServerFixture server) : IClassFixture<ServerFixture
         Assert.Equal(System.Net.HttpStatusCode.TooManyRequests, response.StatusCode);
     }
 
-    private async Task<bool> ConnectsAsync(string hub, Caller caller, string? ip = null)
-    {
-        ip ??= server.CreateApi().Ip;
-        var closed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        await using var connection = new HubConnectionBuilder()
-            .WithUrl(new Uri(server.Server.BaseAddress, $"signalr/hubs/{hub}"), options =>
-            {
-                options.HttpMessageHandlerFactory = _ => server.Server.CreateHandler();
-                options.Transports = HttpTransportType.LongPolling;
-                options.Headers["X-Test-Remote-Ip"] = ip;
-                if (caller.EdgeName != null) { options.Headers["EdgeName"] = caller.EdgeName; }
-                if (caller.PackageName != null) { options.Headers["PackageName"] = caller.PackageName; }
-                if (caller.AccessKey != null) { options.Headers["AccessKey"] = caller.AccessKey; }
-                if (caller.SessionToken != null) { options.Headers["Cookie"] = $"{Api.SessionCookie}={caller.SessionToken}"; }
-            })
-            .Build();
-        connection.Closed += _ =>
-        {
-            closed.TrySetResult();
-            return Task.CompletedTask;
-        };
-
-        try
-        {
-            await connection.StartAsync();
-        }
-        catch (HttpRequestException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
-        {
-            // Not a refusal: the hub route itself is wrong, and every "rejected" assertion would pass for nothing.
-            throw new InvalidOperationException($"The hub route for {hub} does not exist.", ex);
-        }
-        catch (Exception)
-        {
-            return false;
-        }
-
-        // Rejected connections are closed by the Server; accepted ones stay up. Wait long enough to tell.
-        var finished = await Task.WhenAny(closed.Task, Task.Delay(AcceptedWindow)) == closed.Task;
-        if (!finished)
-        {
-            return true;
-        }
-        return false;
-    }
+    private Task<bool> ConnectsAsync(string hub, Caller caller, string? ip = null) => HubProbe.ConnectsAsync(server, hub, caller, ip);
 }

@@ -2,7 +2,21 @@ import { store } from "../Scripts/store.js";
 import * as api from "../Scripts/management-api.js";
 import Modal from "../Scripts/Modal.js";
 
-const emptyCredential = () => ({ Name: "", AccessKey: "", Kind: "Machine", Enable: true, Scopes: [] });
+const emptyCredential = () => ({ Name: "", AccessKey: "", Kind: "Machine", Enable: true, Scopes: [], ExpiresUtc: null });
+
+// A token never holds the scopes that only an Edge or a package credential needs to open its own connection.
+const machineOnlyScopes = ["edge:connect", "package:connect"];
+
+// An <input type="datetime-local"> works in local time without a zone: convert from/to the ISO instant the Server keeps.
+const toLocalInput = (iso) => {
+    if (!iso) {
+        return "";
+    }
+    const date = new Date(iso);
+    const pad = (n) => String(n).padStart(2, "0");
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+};
+const fromLocalInput = (value) => (value ? new Date(value).toISOString() : null);
 
 // Named permission scopes (see OrbitMesh.Server's OrbitMeshScope) grouped for the matrix below - each
 // entry is one scope a credential can be granted, explicit and individually-grantable (PAT-style,
@@ -59,7 +73,7 @@ export default {
     data() {
         return {
             store, filter: "", kindFilter: "", expanded: null, editCredential: null, editResetKey: false,
-            editNewPassword: "", authExpanded: null, editAuth: null,
+            editNewPassword: "", editExpiry: "", newTokenDays: "", authExpanded: null, editAuth: null,
             newCredential: emptyCredential(), newCredentialPassword: "",
             creating: false, saving: false, savingAuth: false, scopeCatalog,
             lockedIps: [], unlocking: {}, lockoutPollHandle: null,
@@ -84,6 +98,11 @@ export default {
         }
     },
     computed: {
+        tokenScopeCatalog() {
+            return scopeCatalog
+                .map((g) => ({ ...g, scopes: g.scopes.filter((s) => !machineOnlyScopes.includes(s.value)) }))
+                .filter((g) => g.scopes.length > 0);
+        },
         filtered() {
             const term = this.filter.toLowerCase();
             return (store.credentials || [])
@@ -93,7 +112,7 @@ export default {
     },
     methods: {
         async upsert(credential) {
-            await api.upsertCredential(credential.Name, credential.AccessKey, credential.Kind, credential.Enable, credential.Scopes);
+            await api.upsertCredential(credential.Name, credential.AccessKey, credential.Kind, credential.Enable, credential.Scopes, credential.ExpiresUtc);
             // GetCredentials reads IOptionsMonitor's CurrentValue, which only catches up with the write
             // above once its file-watcher reload fires - an immediate reload can race and read stale
             // data (same class of bug fixed for the package deploy flow in Packages.js).
@@ -135,6 +154,26 @@ export default {
         lastUsedLabel(credential) {
             return credential.LastUsedUtc ? new Date(credential.LastUsedUtc).toLocaleString() : "Never";
         },
+        expiryLabel(credential) {
+            if (!credential.ExpiresUtc) {
+                return "never expires";
+            }
+            const when = new Date(credential.ExpiresUtc);
+            return (when <= new Date() ? "expired " : "expires ") + when.toLocaleString();
+        },
+        isExpired(credential) {
+            return !!credential.ExpiresUtc && new Date(credential.ExpiresUtc) <= new Date();
+        },
+        async rotateToken(credential) {
+            if (!(await store.confirm(`Rotate the token '${credential.Name}'? The current one stops working as soon as you confirm, and the new one is shown only once.`))) {
+                return;
+            }
+            const rotated = await api.rotateToken(credential.Name);
+            this.expanded = null;
+            this.reveal(credential.Name, "API token", rotated.Token);
+            await new Promise((resolve) => setTimeout(resolve, 500));
+            await store.loadCredentials();
+        },
         scopesSummary(credential) {
             const scopes = credential.Scopes || [];
             if (scopes.length === 0) {
@@ -165,6 +204,7 @@ export default {
             // AccessKey starts blank regardless of Kind - leaving it blank means "unchanged" unless
             // Generate new/Reset is used - saveCredential should never need it just to flip Enable/scopes.
             this.editCredential = { ...credential, AccessKey: "", Scopes: [...(credential.Scopes || [])] };
+            this.editExpiry = toLocalInput(credential.ExpiresUtc);
         },
         async saveCredential() {
             this.saving = true;
@@ -184,6 +224,9 @@ export default {
                     this.editCredential.AccessKey = this.editNewPassword;
                 } else if (this.editCredential.Kind === "Machine" && this.editCredential.AccessKey) {
                     revealed = { label: "Access Key", value: this.editCredential.AccessKey };
+                }
+                if (this.editCredential.Kind === "Token") {
+                    this.editCredential.ExpiresUtc = fromLocalInput(this.editExpiry);
                 }
                 await this.upsert(this.editCredential);
                 this.expanded = null;
@@ -206,6 +249,18 @@ export default {
             }
             this.creating = true;
             try {
+                if (this.newCredential.Kind === "Token") {
+                    // The Server makes the token and answers with it once; there is nothing to type or generate here.
+                    const days = Number(this.newTokenDays);
+                    const expires = days > 0 ? new Date(Date.now() + days * 86400000).toISOString() : null;
+                    const created = await api.createToken(this.newCredential.Name, this.newCredential.Scopes, expires, this.newCredential.Enable);
+                    this.newCredential = emptyCredential();
+                    this.newTokenDays = "";
+                    this.reveal(created.Name, "API token", created.Token);
+                    await new Promise((resolve) => setTimeout(resolve, 500));
+                    await store.loadCredentials();
+                    return;
+                }
                 // Human doesn't need a reveal dialog afterwards: the secret is the password the admin
                 // just typed, which they already know - nothing new to copy down. Machine still needs
                 // one, same as ever - it's a generated/typed bearer token, not something memorized.
@@ -293,15 +348,19 @@ export default {
                 <h3>Add credential</h3>
                 <label><input type="radio" value="Machine" v-model="newCredential.Kind" /> Machine (Edge/package token)</label>
                 <label><input type="radio" value="Human" v-model="newCredential.Kind" /> Human (console login)</label>
+                <label><input type="radio" value="Token" v-model="newCredential.Kind" /> API token (script, dashboard)</label>
                 <input v-model="newCredential.Name" placeholder="Name" />
-                <template v-if="newCredential.Kind === 'Machine'">
+                <template v-if="newCredential.Kind === 'Token'">
+                    <input v-model="newTokenDays" type="number" min="1" placeholder="Expires in (days)" style="width:160px" title="Leave empty for a token that never expires" />
+                </template>
+                <template v-else-if="newCredential.Kind === 'Machine'">
                     <input v-model="newCredential.AccessKey" placeholder="Access Key" style="width:260px" />
                     <button type="button" @click="generateNewAccessKey(newCredential)">Generate</button>
                 </template>
                 <input v-else v-model="newCredentialPassword" type="password" placeholder="Password" style="width:180px" />
                 <label><input type="checkbox" v-model="newCredential.Enable" /> Enable</label>
                 <div class="scope-matrix">
-                    <div v-for="group in scopeCatalog" :key="group.category" class="scope-group">
+                    <div v-for="group in (newCredential.Kind === 'Token' ? tokenScopeCatalog : scopeCatalog)" :key="group.category" class="scope-group">
                         <strong>{{ group.category }}</strong>
                         <label v-for="s in group.scopes" :key="s.value" :title="s.description">
                             <input type="checkbox" :value="s.value" v-model="newCredential.Scopes" /> {{ s.label }}
@@ -314,6 +373,7 @@ export default {
                 <strong>What these rights are for</strong>
                 <ul style="margin:6px 0 0 18px;">
                     <li><strong>Machine</strong> — an Edge or package's token; stored encrypted (the Server can still decrypt it to hand back out when launching packages), shown once at creation/reset and never again.</li>
+                    <li><strong>API token</strong> — for a script, a dashboard or a kiosk calling the Console APIs (never an Edge or a package). Generated by the Server as <code>omk_&lt;id&gt;_&lt;secret&gt;</code>, shown once, then only a hash is kept. It can expire, be disabled, or be rotated.</li>
                     <li><strong>Human</strong> — a console login; stored as a one-way hash, never shown or resubmitted once set.</li>
                     <li><strong>Scopes</strong> — named permissions (hover a checkbox for details). Grant only what a credential actually needs - e.g. a read-only demo account gets just the *:read scopes.</li>
                 </ul>
@@ -345,6 +405,7 @@ export default {
                     <option value="">All kinds</option>
                     <option value="Machine">Machine</option>
                     <option value="Human">Human</option>
+                    <option value="Token">Token</option>
                 </select>
             </p>
             <div class="table-scroll">
@@ -360,7 +421,13 @@ export default {
                 <tbody>
                     <template v-for="credential in filtered" :key="credential.Name">
                         <tr>
-                            <td>{{ credential.Name }}</td>
+                            <td>
+                                {{ credential.Name }}
+                                <div v-if="credential.Kind === 'Token'" class="muted" style="font-size:0.8em;">
+                                    <code>omk_{{ credential.TokenId }}_…</code>
+                                    <span :class="{ error: isExpired(credential) }"> · {{ expiryLabel(credential) }}</span>
+                                </div>
+                            </td>
                             <td><span class="badge" :class="credential.Kind === 'Human' ? 'allow' : ''">{{ credential.Kind }}</span></td>
                             <td><span class="badge" :class="credential.Enable ? 'connected' : 'disconnected'">{{ credential.Enable ? 'Enabled' : 'Disabled' }}</span></td>
                             <td :title="scopesTitle(credential)">{{ scopesSummary(credential) }}</td>
@@ -377,7 +444,18 @@ export default {
                                 <div class="detail-columns" style="grid-template-columns: 1fr;">
                                     <div>
                                         <h4>Edit '{{ editCredential.Name }}' ({{ editCredential.Kind }})</h4>
-                                        <div class="setting-row" v-if="editCredential.Kind === 'Machine'">
+                                        <div class="setting-row" v-if="editCredential.Kind === 'Token'">
+                                            <label>Token</label>
+                                            <code>omk_{{ editCredential.TokenId }}_…</code>
+                                            <span class="muted">only a hash is kept - it cannot be shown again</span>
+                                            <button type="button" @click="rotateToken(editCredential)">Rotate</button>
+                                        </div>
+                                        <div class="setting-row" v-if="editCredential.Kind === 'Token'">
+                                            <label>Expires</label>
+                                            <input v-model="editExpiry" type="datetime-local" />
+                                            <button type="button" @click="editExpiry = ''">Never</button>
+                                        </div>
+                                        <div class="setting-row" v-else-if="editCredential.Kind === 'Machine'">
                                             <label>Access Key</label>
                                             <input :placeholder="'Leave blank to keep the current key'" v-model="editCredential.AccessKey" style="width:320px" />
                                             <button type="button" @click="generateNewAccessKey(editCredential)">Generate new</button>
@@ -394,7 +472,7 @@ export default {
                                         </div>
                                         <label><input type="checkbox" v-model="editCredential.Enable" /> Enable</label>
                                         <div class="scope-matrix">
-                                            <div v-for="group in scopeCatalog" :key="group.category" class="scope-group">
+                                            <div v-for="group in (editCredential.Kind === 'Token' ? tokenScopeCatalog : scopeCatalog)" :key="group.category" class="scope-group">
                                                 <strong>{{ group.category }}</strong>
                                                 <label v-for="s in group.scopes" :key="s.value" :title="s.description">
                                                     <input type="checkbox" :value="s.value" v-model="editCredential.Scopes" /> {{ s.label }}

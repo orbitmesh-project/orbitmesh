@@ -4,6 +4,23 @@ Format: [Keep a Changelog](https://keepachangelog.com/). Versions match `<Versio
 `OrbitMesh.Server.csproj`, which is what's reported to the update server (see
 `Services/ServerSelfUpdater.cs` and `Services/UpdateCheckService.cs`).
 
+## [1.4.0]
+
+### Added
+
+- **API tokens** (`Kind: Token`) for scripts, dashboards and kiosks that call the Management, Controller or
+  Consumer API - not for Edges or packages. The Server generates the token as `omk_<id>_<secret>` (a public
+  16-hex id and 256 bits of secret), returns it **once** and keeps only its SHA-256 (`TKN$...`). It is found by
+  its id (one hash to check, instead of a decryption per credential), compared in constant time, can **expire**
+  (`expiresUtc`), be **rotated** and be disabled or removed like any credential. The fixed `omk_` prefix lets a
+  secret scanner (GitHub, gitleaks) recognise a leaked token. New endpoints: `POST rest/management/credentials/tokens`
+  and `POST rest/management/credentials/{name}/rotate` (both `credentials:manage`, subject to the usual rule that
+  you can only hand out scopes you hold). Existing Machine keys are untouched and nothing is migrated.
+- A token can't hold `edge:connect` or `package:connect`, is refused at an Edge's or a package's own door (even if
+  assigned to one by hand-editing `appsettings.json`), can't be assigned to an Edge or a package through the
+  Management API or the configuration editor, and can't be created or have its secret chosen through the
+  ordinary credential save or the configuration editor.
+
 ## [1.3.3]
 
 ### Fixed

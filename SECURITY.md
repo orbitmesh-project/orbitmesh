@@ -28,14 +28,14 @@ flowchart TD
 
 Who can use which door:
 
-| Door | Used by | Machine key | Password session | SSO session |
-| --- | --- | :---: | :---: | :---: |
-| Management API (`/rest/management`) | Console, scripts | Yes, if the credential holds at least one scope; then the endpoint's own scope | Yes | Yes |
-| `ControlHub` | Console live view | Yes (same rule) | Yes | Yes |
-| `ConsumerHub`, `/rest/consumer` | Dashboards, Console | Yes, any enabled credential; then scopes and rules | Yes | Yes |
-| `EdgeHub` | An Edge | Only the credential assigned to that Edge, with `edge:connect` | No | No |
-| `OrbitMeshHub`, `/rest/orbitmesh` | Packages | Only the credential assigned to that package (or its Edge), with `package:connect` | No | No |
-| `Developer` edge | Local development | A key holding `developer` | No | No |
+| Door | Used by | Machine key | API token | Password session | SSO session |
+| --- | --- | :---: | :---: | :---: | :---: |
+| Management API (`/rest/management`) | Console, scripts | Yes, if the credential holds at least one scope; then the endpoint's own scope | Same | Yes | Yes |
+| `ControlHub` | Console live view | Yes (same rule) | Same | Yes | Yes |
+| `ConsumerHub`, `/rest/consumer` | Dashboards, Console | Yes, any enabled credential; then scopes and rules | Same | Yes | Yes |
+| `EdgeHub` | An Edge | Only the credential assigned to that Edge, with `edge:connect` | **No** | No | No |
+| `OrbitMeshHub`, `/rest/orbitmesh` | Packages | Only the credential assigned to that package (or its Edge), with `package:connect` | **No** | No | No |
+| `Developer` edge | Local development | A key holding `developer` | REST only | No | No |
 
 Open **on purpose**, each bounded: `/rest/enroll` (an Edge asking to be approved), `/rest/management/setup/*`
 (first run only), `/rest/auth/*` (sign-in), static sites under a `FileServers` path, and `/metrics`
@@ -57,9 +57,20 @@ A credential is either:
   of the config file alone doesn't hand over every Machine credential - both files have to be
   compromised together.
 
-A Machine key is shown **once**, at creation or reset, in the Console UI. It is never
-displayed again afterwards - if it's lost, reset it and get a new one. (A Human password is the one you
-typed, so there's nothing to show.)
+- **Token** — an **API token** for a script, a dashboard or a kiosk that calls the Console's APIs (never an
+  Edge or a package). The Server generates it as `omk_<id>_<secret>` (a public 16-hex id and 256 bits of
+  secret), shows it once, and keeps **only its SHA-256**: a random 256-bit secret has nothing to gain from a
+  slow hash, and nothing ever has to read it back. The token is found by its id, so checking one costs a
+  single hash, and it is compared in constant time. It can **expire**, be **rotated** (new id and secret, the
+  old one stops at once) and be revoked on its own. It cannot hold `edge:connect`/`package:connect`, and the
+  Server refuses it at an Edge's or a package's own door even if someone assigns it to one by hand-editing
+  `appsettings.json`. The fixed `omk_` prefix lets secret scanners flag a leaked token: on GitHub, add
+  `omk_[0-9a-f]{16}_[A-Za-z0-9_-]{43}` as a custom secret-scanning pattern.
+
+A Machine key or an API token is shown **once**, at creation or reset/rotation, in the Console UI. It is never
+displayed again afterwards - if it's lost, reset (or rotate) it and get a new one. (A Human password is the one
+you typed, so there's nothing to show.) Prefer a token to a Machine key for anything that isn't an Edge or a
+package.
 
 ## Signing in
 
@@ -221,7 +232,10 @@ pending list shows only self-declared data: approve an Edge you recognise.
   approving an Edge (package credentials auto-provisioned by the Server default to Deny). Scopes are the
   real gate; tighten the rule sets per credential where it matters.
 - **No expiry on Machine credentials.** A generated key is valid until manually reset or the credential
-  is disabled/removed - there's no time-limited token support yet.
+  is disabled/removed. For time-limited access use an API token with an expiry.
+- **A rotated or revoked token stops working when the configuration reloads** - a fraction of a second after
+  the change, not instantly. A hub connection it already opened stays open, but its credential is looked up again on each
+  call, so the calls are refused.
 - **Authorizations are still a single flat list of rules** (Messages/Groups/TelemetryItems), not scoped
   per-credential-kind or bulk-editable; this predates the scope system and hasn't changed.
 
@@ -235,7 +249,8 @@ pending list shows only self-declared data: approve an Edge you recognise.
 - **Back up `appsettings.json` and the `keys/` folder together.** Without `keys/credential-encryption.key`
   Machine keys can't be read back. `keys/` also holds the sessions (`sessions.json`, hashes only) and the
   Data Protection ring used by single sign-on - keep its permissions tight.
-- Give each Machine credential **only the scopes it needs** and tighten its `authorizations`: a dashboard
+- Use **API tokens, with an expiry,** for scripts, dashboards and kiosks; keep Machine keys for Edges and packages.
+- Give each Machine credential or token **only the scopes it needs** and tighten its `authorizations`: a dashboard
   that only displays telemetry needs `telemetry:read`, nothing else.
 - **Restrict `/metrics`**, and keep secrets out of files served by a `FileServers` path - those are public
   unless `localhostOnly` or your proxy says otherwise.

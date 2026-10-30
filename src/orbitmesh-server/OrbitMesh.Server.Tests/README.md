@@ -25,6 +25,7 @@ which identity opens which door. The tests are that table, executable:
 | `VariantServerTests` | First-run setup, local sign-in off, single sign-on off or removed |
 | `HubTests` | SignalR hubs accept and refuse the same callers as the REST doors |
 | `AuthorizationRulesTests` | Per-credential rules for messages, groups and telemetry items |
+| `ApiTokenTests` | API tokens: format, hash-only storage, doors, expiry, revocation, rotation, delegation, configuration-editor guards |
 | `MetricsTests` | The public `/metrics` endpoint keeps working once there is traffic |
 | `SecurityPartsTests` | Password hashing, role mapper, session store, key cipher |
 

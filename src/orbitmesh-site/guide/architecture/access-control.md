@@ -96,29 +96,40 @@ Layers 4 and 5 are the same two-level model as AWS IAM: a scope authorizes an *a
 
 ## Who can use which door
 
-| Door | Used by | Machine key | Password session | SSO session |
-| --- | --- | :---: | :---: | :---: |
-| Management API (`/rest/management`) | The Console, scripts | Yes - any credential holding at least one scope, then the endpoint's own scope | Yes | Yes |
-| `ControlHub` | The Console's live view | Yes (same rule) | Yes | Yes |
-| `ConsumerHub`, `/rest/consumer` | Dashboards, the Console | Yes - any enabled credential, then scopes and rules | Yes | Yes |
-| `EdgeHub` | An Edge process | Only the credential assigned to that Edge, with `edge:connect` | No | No |
-| `OrbitMeshHub`, `/rest/orbitmesh` | Packages | Only the credential assigned to that package (or its Edge), with `package:connect` | No | No |
-| The `Developer` edge | Local development | A key holding `developer` | No | No |
+| Door | Used by | Machine key | API token | Password session | SSO session |
+| --- | --- | :---: | :---: | :---: | :---: |
+| Management API (`/rest/management`) | The Console, scripts | Yes - any credential holding at least one scope, then the endpoint's own scope | Same | Yes | Yes |
+| `ControlHub` | The Console's live view | Yes (same rule) | Same | Yes | Yes |
+| `ConsumerHub`, `/rest/consumer` | Dashboards, the Console | Yes - any enabled credential, then scopes and rules | Same | Yes | Yes |
+| `EdgeHub` | An Edge process | Only the credential assigned to that Edge, with `edge:connect` | **No** | No | No |
+| `OrbitMeshHub`, `/rest/orbitmesh` | Packages | Only the credential assigned to that package (or its Edge), with `package:connect` | **No** | No | No |
+| The `Developer` edge | Local development | A key holding `developer` | REST only | No | No |
 
 A few doors are open **on purpose**, each bounded: `/rest/enroll` (an Edge asking to be approved), `/rest/management/setup/*` (first run only), `/rest/auth/*` (sign-in), static sites under a `FileServers` path, and `/metrics` (Prometheus). Anything you don't want public - `/metrics`, or a site that stores a key in its own config file - belongs behind `localhostOnly`, your reverse proxy or a firewall.
 
-## Three kinds of identity
+## Four kinds of identity
 
-| | Machine credential | Human credential | Single sign-on user |
-| --- | --- | --- | --- |
-| For | Edges, packages, dashboards, scripts | A person with a local account | A person signed in through Authelia |
-| Proves itself with | Its AccessKey, on every request or connection | A password, once - then a session | The identity provider, once - then a session |
-| Stored as | AES-256-GCM in `appsettings.json`; the key is in `keys/` | A salted PBKDF2 hash | Nothing - its groups arrive with the sign-in |
-| Lasts | Until reset, disabled or removed | Session: 30 min idle, 24 h at most | Same |
-| Rights come from | `scopes` + `authorizations` of the credential | Same, read live | `roleMappings` of its groups; no per-target rules |
-| Appears in the audit log as | The credential name | The credential name | `oidc:<login>` |
+| | Machine credential | API token | Human credential | Single sign-on user |
+| --- | --- | --- | --- | --- |
+| For | Edges and packages (the Server hands their key out when it launches them) | Scripts, dashboards, kiosks calling the Console's APIs | A person with a local account | A person signed in through Authelia |
+| Proves itself with | Its AccessKey, on every request or connection | Its token `omk_<id>_<secret>`, as the AccessKey | A password, once - then a session | The identity provider, once - then a session |
+| Stored as | AES-256-GCM in `appsettings.json`; the key is in `keys/` | Only a SHA-256 hash - the token itself can't be recovered | A salted PBKDF2 hash | Nothing - its groups arrive with the sign-in |
+| Lasts | Until reset, disabled or removed | Until its expiry (optional), or disabled, rotated or removed | Session: 30 min idle, 24 h at most | Same |
+| Rights come from | `scopes` + `authorizations` of the credential | Same | Same, read live | `roleMappings` of its groups; no per-target rules |
+| Appears in the audit log as | The credential name | The credential name | The credential name | `oidc:<login>` |
 
 A Machine key is shown once, when created or reset. It can authenticate an Edge, a package or a script, but it can never be used to sign in to the Console.
+
+### API tokens
+
+Prefer an **API token** to a Machine key for anything that is not an Edge or a package. Create one on the Credentials page (kind *API token*): the Server generates it, shows it **once**, and keeps only its hash. Compared with a Machine key:
+
+- It is recognisable: the fixed `omk_` prefix lets a secret scanner flag a token that leaks into a repository or a log. On GitHub, add the pattern `omk_[0-9a-f]{16}_[A-Za-z0-9_-]{43}` as a custom secret-scanning pattern.
+- It is found by its public id (`omk_<id>_…`), so you can tell which token an alert is about, and checking it costs one hash instead of a decryption per credential.
+- It can **expire**, can be **rotated** (new secret, old one dead at once, same name, scopes and rules) and **revoked** on its own like any credential.
+- It can never hold `edge:connect` or `package:connect`, and it is refused at an Edge's or a package's own door.
+
+It is sent exactly like any AccessKey (`AccessKey` header, or the query string where a header can't be set). Existing Machine keys keep working; nothing is migrated.
 
 ## Scopes
 
@@ -287,7 +298,8 @@ identity_providers:
 - Behind a proxy, list it in **`TrustedProxies`** and keep the original `Host` header: the lockout, `localhostOnly`, and the single sign-on redirect address all depend on it.
 - Create the **first admin right away** (or configure single sign-on, which closes that step).
 - **Back up `appsettings.json` and the `keys/` folder together.** Without `keys/credential-encryption.key` the Machine keys can't be read back; `keys/` also holds the sessions and the single sign-on state, so keep its permissions tight.
-- Give each Machine credential **only the scopes it needs**, and tighten its `authorizations` (a dashboard that only displays telemetry needs `telemetry:read`, not more).
+- Use **API tokens**, with an expiry, for scripts, dashboards and kiosks - keep Machine keys for Edges and packages.
+- Give each Machine credential or token **only the scopes it needs**, and tighten its `authorizations` (a dashboard that only displays telemetry needs `telemetry:read`, not more).
 - **Restrict `/metrics`** and keep secrets out of static sites.
 - Set **`UpdateOptions:PublicKeys`** so self-updates are verified.
 

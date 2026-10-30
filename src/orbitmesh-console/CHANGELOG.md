@@ -3,6 +3,18 @@
 Format: [Keep a Changelog](https://keepachangelog.com/). Versions match the `VERSION` file at
 the root of this project, bumped by `cicd/release-static-site.ps1`.
 
+## [1.4.0]
+
+Needs a Server with API tokens (see the Server changelog); the rest of the Console is unchanged.
+
+### Added
+
+- **API tokens** on the Credentials page: a third kind, *API token*, next to Machine and Human. Name, optional
+  expiry in days and scopes (never the Edge/package connection ones); the Server generates the token and the
+  Console shows it once, with a copy button and the usual "I've saved this value" check. In the list a token
+  shows its public id (`omk_<id>_…`) and when it expires or expired; **Manage** edits its scopes and expiry and has
+  a **Rotate** button (with confirmation) that shows the new token once.
+
 ## [1.3.2]
 
 Update the Server first: only Server 1.3.2 lets an Administrator account map a group to "all scopes".

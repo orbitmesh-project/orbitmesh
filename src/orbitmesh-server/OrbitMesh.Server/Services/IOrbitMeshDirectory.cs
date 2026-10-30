@@ -113,6 +113,13 @@ public sealed class OrbitMeshDirectory : IOrbitMeshDirectory
             return CanAccess(caller, accessType) && caller.Scopes.Contains(OrbitMeshScope.Developer);
         }
 
+        // An API token is for scripts and dashboards calling the Console's APIs: never an Edge or a package,
+        // which need a Machine credential the Server can hand out when it launches them.
+        if (caller.Kind == CredentialKind.Token)
+        {
+            return false;
+        }
+
         var edge = config.Edges.FirstOrDefault(s => s.Name.Equals(edgeName, StringComparison.OrdinalIgnoreCase));
         if (edge == null || string.IsNullOrEmpty(edge.Credential))
         {
@@ -150,6 +157,13 @@ public sealed class OrbitMeshDirectory : IOrbitMeshDirectory
             return sessions.TryGetById(CallerKeys.SessionIdOf(accessKey)) is { } session ? CredentialForSession(session) : null;
         }
 
+        // Something shaped like an API token is only ever checked as one: found by its public id, verified by its
+        // hash, refused once expired. It never falls through to the Machine/Human comparison below.
+        if (ApiTokens.TryParse(accessKey, out var tokenId))
+        {
+            return ResolveToken(accessKey, tokenId);
+        }
+
         var cacheKey = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(accessKey)));
         if (verifiedKeys.TryGetValue(cacheKey, out var name))
         {
@@ -171,6 +185,17 @@ public sealed class OrbitMeshDirectory : IOrbitMeshDirectory
             verifiedKeys[cacheKey] = found.Name;
         }
         return found;
+    }
+
+    private CredentialOptions? ResolveToken(string presented, string tokenId)
+    {
+        var credential = Current.Credentials.FirstOrDefault(c =>
+            c.Kind == CredentialKind.Token && c.Enable && string.Equals(c.TokenId, tokenId, StringComparison.Ordinal));
+        if (credential == null || !ApiTokens.Verify(credential.AccessKey, presented))
+        {
+            return null;
+        }
+        return credential.ExpiresUtc is { } expires && expires <= DateTimeOffset.UtcNow ? null : credential;
     }
 
     private CredentialOptions? CredentialForSession(SessionInfo session)
@@ -210,6 +235,11 @@ public sealed class OrbitMeshDirectory : IOrbitMeshDirectory
     // credentials keep working until OrbitMeshConfigWriter's startup migration re-encrypts them.
     private bool MatchesAccessKey(CredentialOptions credential, string presentedAccessKey)
     {
+        // A token's stored value is a hash of its key, so comparing it as a key would let the hash itself in.
+        if (credential.Kind == CredentialKind.Token)
+        {
+            return false;
+        }
         if (credential.Kind == CredentialKind.Human)
         {
             return AccessKeyHasher.IsHashed(credential.AccessKey) && AccessKeyHasher.Verify(credential.AccessKey, presentedAccessKey);

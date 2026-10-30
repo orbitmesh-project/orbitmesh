@@ -97,29 +97,40 @@ Les couches 4 et 5 suivent le même modèle à deux niveaux qu'AWS IAM : un scop
 
 ## Qui peut utiliser quelle porte
 
-| Porte | Utilisée par | Clé Machine | Session mot de passe | Session SSO |
-| --- | --- | :---: | :---: | :---: |
-| API Management (`/rest/management`) | La Console, des scripts | Oui - tout identifiant détenant au moins un scope, puis le scope propre à l'endpoint | Oui | Oui |
-| `ControlHub` | La vue en direct de la Console | Oui (même règle) | Oui | Oui |
-| `ConsumerHub`, `/rest/consumer` | Tableaux de bord, la Console | Oui - tout identifiant activé, puis scopes et règles | Oui | Oui |
-| `EdgeHub` | Un process Edge | Seulement l'identifiant attribué à cet Edge, avec `edge:connect` | Non | Non |
-| `OrbitMeshHub`, `/rest/orbitmesh` | Les packages | Seulement l'identifiant attribué à ce package (ou à son Edge), avec `package:connect` | Non | Non |
-| L'edge `Developer` | Développement local | Une clé détenant `developer` | Non | Non |
+| Porte | Utilisée par | Clé Machine | Token d'API | Session mot de passe | Session SSO |
+| --- | --- | :---: | :---: | :---: | :---: |
+| API Management (`/rest/management`) | La Console, des scripts | Oui - tout identifiant détenant au moins un scope, puis le scope propre à l'endpoint | Idem | Oui | Oui |
+| `ControlHub` | La vue en direct de la Console | Oui (même règle) | Idem | Oui | Oui |
+| `ConsumerHub`, `/rest/consumer` | Tableaux de bord, la Console | Oui - tout identifiant activé, puis scopes et règles | Idem | Oui | Oui |
+| `EdgeHub` | Un process Edge | Seulement l'identifiant attribué à cet Edge, avec `edge:connect` | **Non** | Non | Non |
+| `OrbitMeshHub`, `/rest/orbitmesh` | Les packages | Seulement l'identifiant attribué à ce package (ou à son Edge), avec `package:connect` | **Non** | Non | Non |
+| L'edge `Developer` | Développement local | Une clé détenant `developer` | REST seulement | Non | Non |
 
 Quelques portes sont ouvertes **volontairement**, chacune bornée : `/rest/enroll` (un Edge qui demande à être approuvé), `/rest/management/setup/*` (premier lancement uniquement), `/rest/auth/*` (connexion), les sites statiques sous un chemin `FileServers`, et `/metrics` (Prometheus). Ce que vous ne voulez pas public - `/metrics`, ou un site qui garde une clé dans son propre fichier de config - doit être derrière `localhostOnly`, votre reverse proxy ou un pare-feu.
 
-## Trois sortes d'identité
+## Quatre sortes d'identité
 
-| | Identifiant Machine | Identifiant Human | Utilisateur SSO |
-| --- | --- | --- | --- |
-| Pour | Edges, packages, tableaux de bord, scripts | Une personne avec un compte local | Une personne connectée via Authelia |
-| Se prouve avec | Son AccessKey, à chaque requête ou connexion | Un mot de passe, une fois - puis une session | Le fournisseur d'identité, une fois - puis une session |
-| Stocké sous forme | AES-256-GCM dans `appsettings.json` ; la clé est dans `keys/` | Un hash PBKDF2 salé | Rien - ses groupes arrivent avec la connexion |
-| Dure | Jusqu'à réinitialisation, désactivation ou suppression | Session : 30 min d'inactivité, 24 h au plus | Idem |
-| Ses droits viennent de | `scopes` + `authorizations` de l'identifiant | Idem, lus à chaud | `roleMappings` de ses groupes ; pas de règles par cible |
-| Apparaît dans l'audit sous | Le nom de l'identifiant | Le nom de l'identifiant | `oidc:<login>` |
+| | Identifiant Machine | Token d'API | Identifiant Human | Utilisateur SSO |
+| --- | --- | --- | --- | --- |
+| Pour | Edges et packages (le Server redonne leur clé quand il les lance) | Scripts, tableaux de bord, kiosques qui appellent les API de la Console | Une personne avec un compte local | Une personne connectée via Authelia |
+| Se prouve avec | Son AccessKey, à chaque requête ou connexion | Son token `omk_<id>_<secret>`, en guise d'AccessKey | Un mot de passe, une fois - puis une session | Le fournisseur d'identité, une fois - puis une session |
+| Stocké sous forme | AES-256-GCM dans `appsettings.json` ; la clé est dans `keys/` | Seulement un hash SHA-256 - le token lui-même est irrécupérable | Un hash PBKDF2 salé | Rien - ses groupes arrivent avec la connexion |
+| Dure | Jusqu'à réinitialisation, désactivation ou suppression | Jusqu'à son expiration (facultative), ou désactivation, rotation, suppression | Session : 30 min d'inactivité, 24 h au plus | Idem |
+| Ses droits viennent de | `scopes` + `authorizations` de l'identifiant | Idem | Idem, lus à chaud | `roleMappings` de ses groupes ; pas de règles par cible |
+| Apparaît dans l'audit sous | Le nom de l'identifiant | Le nom de l'identifiant | Le nom de l'identifiant | `oidc:<login>` |
 
 Une clé Machine n'est affichée qu'une fois, à la création ou à la réinitialisation. Elle authentifie un Edge, un package ou un script, mais ne peut jamais servir à se connecter à la Console.
+
+### Tokens d'API
+
+Pour tout ce qui n'est ni un Edge ni un package, préférez un **token d'API** à une clé Machine. Créez-le dans la page Credentials (type *API token*) : le Server le génère, l'affiche **une seule fois** et n'en garde que le hash. Par rapport à une clé Machine :
+
+- Il est reconnaissable : le préfixe fixe `omk_` permet à un scanner de secrets de signaler un token qui fuit dans un dépôt ou un log. Sur GitHub, ajoutez le motif `omk_[0-9a-f]{16}_[A-Za-z0-9_-]{43}` comme motif personnalisé de détection de secrets.
+- Il se retrouve par son identifiant public (`omk_<id>_…`) : on sait de quel token parle une alerte, et le vérifier coûte un hash au lieu d'un déchiffrement par identifiant.
+- Il peut **expirer**, être **renouvelé** (nouveau secret, ancien mort aussitôt, mêmes nom, scopes et règles) et **révoqué** seul comme tout identifiant.
+- Il ne peut jamais détenir `edge:connect` ni `package:connect`, et il est refusé à la porte d'un Edge ou d'un package.
+
+Il se présente exactement comme une AccessKey (en-tête `AccessKey`, ou chaîne de requête quand un en-tête est impossible). Les clés Machine existantes continuent de fonctionner ; rien n'est migré.
 
 ## Scopes
 
@@ -288,7 +299,8 @@ identity_providers:
 - Derrière un proxy, listez-le dans **`TrustedProxies`** et conservez l'en-tête `Host` d'origine : le verrouillage, `localhostOnly` et l'adresse de redirection de l'authentification unique en dépendent.
 - Créez le **premier admin tout de suite** (ou configurez l'authentification unique, qui supprime cette étape).
 - **Sauvegardez ensemble `appsettings.json` et le dossier `keys/`.** Sans `keys/credential-encryption.key`, les clés Machine ne peuvent plus être relues ; `keys/` contient aussi les sessions et l'état de l'authentification unique, gardez donc ses permissions strictes.
-- Donnez à chaque identifiant Machine **uniquement les scopes dont il a besoin**, et resserrez ses `authorizations` (un tableau de bord qui affiche seulement de la télémétrie a besoin de `telemetry:read`, pas plus).
+- Utilisez des **tokens d'API**, avec une expiration, pour les scripts, tableaux de bord et kiosques - gardez les clés Machine pour les Edges et les packages.
+- Donnez à chaque identifiant Machine ou token **uniquement les scopes dont il a besoin**, et resserrez ses `authorizations` (un tableau de bord qui affiche seulement de la télémétrie a besoin de `telemetry:read`, pas plus).
 - **Restreignez `/metrics`** et ne mettez pas de secrets dans les sites statiques.
 - Renseignez **`UpdateOptions:PublicKeys`** pour que les mises à jour soient vérifiées.
 

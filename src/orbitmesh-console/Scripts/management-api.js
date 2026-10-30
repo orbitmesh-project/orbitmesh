@@ -149,8 +149,14 @@ export const getCredentials = (includeAccessKeys) => get("credentials", { includ
 // ever stores a salted hash of it). "" means "leave the stored secret alone" (role/enable-only edit) - the
 // server preserves the existing one in that case, see ManagementController.InsertOrUpdateCredential. scopes is an array of
 // OrbitMeshScope strings (see Pages/Credentials.js's scope matrix).
-export const upsertCredential = (name, accessKey, kind, enable, scopes) =>
-    post("credentials", { Name: name, AccessKey: accessKey || "", Kind: kind, Enable: enable, Scopes: scopes || [] });
+export const upsertCredential = (name, accessKey, kind, enable, scopes, expiresUtc) =>
+    post("credentials", { Name: name, AccessKey: accessKey || "", Kind: kind, Enable: enable, Scopes: scopes || [], ExpiresUtc: expiresUtc || null });
+// An API token is made by the Server, which answers with the token itself - the only time it is ever visible:
+// { Name, TokenId, Token, ExpiresUtc }. expiresUtc is an ISO date or null for "never".
+export const createToken = (name, scopes, expiresUtc, enable) =>
+    post("credentials/tokens", { Name: name, Scopes: scopes || [], ExpiresUtc: expiresUtc || null, Enable: enable !== false });
+// Replaces the token's secret (and id) and answers with the new one, once; the old one stops working.
+export const rotateToken = (name) => post(`credentials/${enc(name)}/rotate`);
 export const removeCredential = (name) => del(`credentials/${enc(name)}`);
 export const getCredentialAuthorizations = (name) => get(`credentials/${enc(name)}/authorizations`);
 export const setCredentialAuthorizations = (name, authorizations) => post(`credentials/${enc(name)}/authorizations`, authorizations);
