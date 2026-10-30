@@ -42,4 +42,12 @@ public static class OrbitMeshScope
         SchedulesRead, SchedulesManage,
         Developer
     ];
+
+    /// <summary>The scopes that only mean something to an Edge's or a package's own Machine credential (they gate
+    /// the EdgeHub / OrbitMeshHub connections, which a person's session can never open). Nobody signed in
+    /// as a person needs them, and an administrator account doesn't hold them.</summary>
+    public static readonly IReadOnlyList<string> MachineOnly = [EdgeConnect, PackageConnect];
+
+    /// <summary>Every scope a person can usefully hold: <see cref="All"/> without <see cref="MachineOnly"/>.</summary>
+    public static readonly IReadOnlyList<string> ForPeople = All.Where(s => !MachineOnly.Contains(s)).ToList();
 }

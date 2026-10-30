@@ -133,7 +133,11 @@ function forceLogout(message) {
     store.notify(message, "error");
 }
 
-managementApi.setUnauthorizedHandler(() => forceLogout("Your session has expired. Please log in again."));
+// A management call refused with 401/403 doesn't mean the session is gone: the Server also answers 403 to a
+// signed-in person who is simply not allowed to do that (a scope they lack, a change that would hand out
+// scopes they don't hold). Ask the Server whether the session still exists, and only then sign out - the
+// refusal itself reaches the page that made the call, which shows it.
+managementApi.setUnauthorizedHandler(() => checkSessionStillValid());
 
 // Every minute (and when the tab comes back to the foreground) ask the server whether the session is
 // still good. This both notices a session that was revoked, expired or lost in a server restart, and counts

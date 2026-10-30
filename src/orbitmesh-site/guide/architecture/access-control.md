@@ -263,7 +263,7 @@ identity_providers:
 
 `displayName` is the name in the sign-in button ("Sign in with Authelia"; "SSO" if left out). `clientSecret` can also come from the `OrbitMesh__Auth__Oidc__ClientSecret` environment variable. Restart the Server after changing the provider settings; role mappings apply immediately.
 
-**Who gets what.** A user is given the union of the scopes of every mapping whose `group` they belong to (`"*"` means every scope); a user in none of them is refused. Mappings are read live, so editing one applies to sessions already open. These users appear as `oidc:<login>` in the audit log, have no credential entry, and are not subject to per-credential `authorizations` rules (scopes are the gate).
+**Who gets what.** A user is given the union of the scopes of every mapping whose `group` they belong to (`"*"` means every scope a person can hold - all but `edge:connect` and `package:connect`, which belong to Machine credentials); a user in none of them is refused. Mappings are read live, so editing one applies to sessions already open. These users appear as `oidc:<login>` in the audit log, have no credential entry, and are not subject to per-credential `authorizations` rules (scopes are the gate).
 
 **Things to know.**
 

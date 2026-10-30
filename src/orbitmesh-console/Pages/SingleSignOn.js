@@ -1,7 +1,13 @@
 import { store } from "../Scripts/store.js";
 import * as api from "../Scripts/management-api.js";
-import { scopeCatalog } from "./Credentials.js";
+import { scopeCatalog as fullScopeCatalog } from "./Credentials.js";
 
+// The Edge/package connection scopes are for Machine credentials: a signed-in person's session can never open
+// those connections, so a role mapping neither needs nor gets them (the Server drops them from "*" too).
+const machineOnlyScopes = ["edge:connect", "package:connect"];
+const scopeCatalog = fullScopeCatalog
+    .map((g) => ({ ...g, scopes: g.scopes.filter((s) => !machineOnlyScopes.includes(s.value)) }))
+    .filter((g) => g.scopes.length > 0);
 const allScopes = scopeCatalog.flatMap((g) => g.scopes.map((s) => s.value));
 const readScopes = allScopes.filter((s) => s.endsWith(":read"));
 
@@ -112,7 +118,7 @@ export default {
         },
         mappingSummary(mapping) {
             if (mapping.mode === "all") {
-                return "Administrator (every scope)";
+                return "Administrator (all scopes)";
             }
             return mapping.mode === "readonly" ? "Read-only" : `${mapping.scopes.length} scope${mapping.scopes.length === 1 ? "" : "s"}`;
         },
@@ -225,7 +231,7 @@ export default {
                     <div class="sso-mapping-head">
                         <input v-model="mapping.group" placeholder="Group name" />
                         <select :value="mapping.mode" @change="setMode(mapping, $event.target.value)">
-                            <option value="all">Administrator (every scope)</option>
+                            <option value="all">Administrator (all scopes)</option>
                             <option value="readonly">Read-only</option>
                             <option value="custom">Custom...</option>
                         </select>

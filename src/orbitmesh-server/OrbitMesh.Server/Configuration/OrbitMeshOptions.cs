@@ -118,7 +118,7 @@ public sealed class OidcRoleMapping
 {
     public string Group { get; set; } = string.Empty;
 
-    /// <summary>OrbitMeshScope names; "*" stands for every scope.</summary>
+    /// <summary>OrbitMeshScope names; "*" stands for every scope a person can hold (all but edge:connect and package:connect, which are for Machine credentials).</summary>
     public List<string> Scopes { get; set; } = [];
 }
 

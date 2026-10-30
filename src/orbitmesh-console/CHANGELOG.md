@@ -3,6 +3,23 @@
 Format: [Keep a Changelog](https://keepachangelog.com/). Versions match the `VERSION` file at
 the root of this project, bumped by `cicd/release-static-site.ps1`.
 
+## [1.3.2]
+
+Update the Server first: only Server 1.3.2 lets an Administrator account map a group to "all scopes".
+
+### Fixed
+
+- Being **refused** an action no longer signs you out. The Server answers 403 both to someone with no session
+  and to a signed-in person who isn't allowed to do something (a scope they lack, a configuration change that
+  would hand out scopes they don't hold themselves), and the Console took every 403 for an expired session. It
+  now asks the Server whether the session still exists, signs out only if it doesn't, and shows the refusal's
+  reason on the page.
+
+### Changed
+
+- Single sign-on role mappings no longer offer `edge:connect` / `package:connect` (Machine-credential scopes),
+  and "Administrator" now reads "all scopes" - what an Administrator account really holds.
+
 ## [1.3.1]
 
 Works with Server 1.3.0, but update the Server first: only 1.3.1 also refuses, on its side, to turn local

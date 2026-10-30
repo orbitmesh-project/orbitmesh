@@ -16,7 +16,9 @@ public static class OidcRoleMapper
         return Expand(oidc.RoleMappings.Where(m => memberOf.Contains(m.Group)).SelectMany(m => m.Scopes));
     }
 
-    /// <summary>Resolves "*" and drops anything that isn't a scope OrbitMesh knows.</summary>
+    /// <summary>Resolves "*" and drops anything that isn't a scope a person can hold: unknown names, and the
+    /// Edge/package connection scopes (<see cref="OrbitMeshScope.MachineOnly"/>), which a signed-in person's
+    /// session can never use - so "*" is every scope an administrator account has.</summary>
     public static List<string> Expand(IEnumerable<string> scopes)
     {
         var result = new HashSet<string>(StringComparer.Ordinal);
@@ -24,9 +26,9 @@ public static class OidcRoleMapper
         {
             if (scope == AllScopes)
             {
-                result.UnionWith(OrbitMeshScope.All);
+                result.UnionWith(OrbitMeshScope.ForPeople);
             }
-            else if (OrbitMeshScope.All.Contains(scope))
+            else if (OrbitMeshScope.ForPeople.Contains(scope))
             {
                 result.Add(scope);
             }

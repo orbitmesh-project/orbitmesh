@@ -4,6 +4,16 @@ Format: [Keep a Changelog](https://keepachangelog.com/). Versions match `<Versio
 `OrbitMesh.Server.csproj`, which is what's reported to the update server (see
 `Services/ServerSelfUpdater.cs` and `Services/UpdateCheckService.cs`).
 
+## [1.3.2]
+
+### Fixed
+
+- **A role mapping's `"*"` is every scope a person can hold**: all of them except `edge:connect` and
+  `package:connect`, which only gate the Edge/package hub connections that a person's session can never open.
+  This is what an Administrator account holds, so such an account can now map a group to `"*"` - it was refused,
+  since an account may only hand out scopes it holds itself and `"*"` included those two. The two scopes are
+  also ignored if listed explicitly in a mapping.
+
 ## [1.3.1]
 
 Single sign-on can be set up from the Console (Administration → Single sign-on, Console 1.3.1).
