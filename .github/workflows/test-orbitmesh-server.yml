@@ -1,0 +1,59 @@
+name: Test OrbitMesh.Server
+
+# Runs the Server's authentication/authorization test suite (src/orbitmesh-server/OrbitMesh.Server.Tests):
+# the doors-by-identity matrix, sessions, single sign-on, the configuration editor's guards, the hubs.
+# On Linux and on Windows, since the Server ships for both (a Windows Service, and a systemd unit).
+#
+# The suite starts the real Server in-process on a temporary folder: it needs no secret, no network
+# beyond restoring NuGet packages, and touches nothing of the checkout.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "src/orbitmesh-server/**"
+      - ".github/workflows/test-orbitmesh-server.yml"
+  pull_request:
+    paths:
+      - "src/orbitmesh-server/**"
+      - ".github/workflows/test-orbitmesh-server.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: test-orbitmesh-server-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: dotnet test (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Test
+        run: dotnet test src/orbitmesh-server/OrbitMesh.Server.Tests --nologo --logger "trx;LogFileName=test-results.trx" --results-directory test-results
+
+      # Only on failure: the Server's own log of the failing run is in the test output folder.
+      - name: Keep the results of a failed run
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-${{ matrix.os }}
+          path: |
+            test-results/
+            src/orbitmesh-server/OrbitMesh.Server.Tests/bin/Debug/net10.0/Logs/
+          if-no-files-found: ignore
+          retention-days: 7

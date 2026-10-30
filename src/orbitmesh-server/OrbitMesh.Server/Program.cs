@@ -376,3 +376,6 @@ staticSiteUpdateRegistry.Sync();
 app.Services.GetRequiredService<IOptionsMonitor<OrbitMeshOptions>>().OnChange(_ => staticSiteUpdateRegistry.Sync());
 
 app.Run();
+
+// Lets the integration tests (OrbitMesh.Server.Tests) host the real application.
+public partial class Program;

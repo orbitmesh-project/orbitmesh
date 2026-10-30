@@ -1043,7 +1043,9 @@ public sealed class ManagementController(
                 AccessKey = !string.IsNullOrEmpty(request.Password) ? PasswordHasher.Hash(secret) : AccessKeyHasher.Hash(secret),
                 Kind = CredentialKind.Human,
                 Enable = true,
-                Scopes = OrbitMeshScope.All.ToList()
+                // Every scope a person can hold - not the Edge/package connection ones, which belong to Machine
+                // credentials (same set as a single-sign-on "*" mapping, see OrbitMeshScope.ForPeople).
+                Scopes = OrbitMeshScope.ForPeople.ToList()
             });
             created = true;
         });

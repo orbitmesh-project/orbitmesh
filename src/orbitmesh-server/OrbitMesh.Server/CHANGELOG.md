@@ -4,6 +4,29 @@ Format: [Keep a Changelog](https://keepachangelog.com/). Versions match `<Versio
 `OrbitMesh.Server.csproj`, which is what's reported to the update server (see
 `Services/ServerSelfUpdater.cs` and `Services/UpdateCheckService.cs`).
 
+## [1.3.3]
+
+### Fixed
+
+- **`/metrics` answered 500 as soon as the Server had served some traffic**, and kept doing so until restart.
+  The Prometheus exporter (1.17.0-beta.1) had been built for an older OpenTelemetry core than the one installed
+  (1.20.1) and threw a `TypeLoadException` the first time it had to export the request-duration histogram, which
+  only exists once requests have been served. Updated to 1.20.1-beta.1.
+- A message or telemetry request that a credential's own authorization rules refuse answered 500 (an exception
+  from `Forbid()`, there being no authentication scheme to forbid with) instead of 403. The refusal itself held;
+  the status code and the log noise were wrong.
+
+### Changed
+
+- The administrator created by first-run setup (`setup/create-admin`) holds every scope a person can hold - the
+  same 17 as an Administrator account and as a single-sign-on `"*"` mapping - instead of also holding
+  `edge:connect` and `package:connect`, which only matter to Machine credentials. Existing accounts are unchanged.
+
+### Added
+
+- `OrbitMesh.Server.Tests`, an automated suite for the authentication and authorization (doors by identity,
+  sessions, single sign-on, the configuration editor's guards, SignalR hubs), with a GitHub workflow that runs it.
+
 ## [1.3.2]
 
 ### Fixed

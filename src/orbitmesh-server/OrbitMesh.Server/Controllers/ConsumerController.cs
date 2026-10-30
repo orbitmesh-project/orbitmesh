@@ -40,7 +40,7 @@ public sealed class ConsumerController(
     {
         if (!directory.CheckMessageAuthorization(GetAccessKey(), scope, key))
         {
-            return Forbid();
+            return StatusCode(StatusCodes.Status403Forbidden);
         }
         var sender = new MessageSender { Type = MessageSender.SenderType.ConsumerHttp, ConnectionId = null, FriendlyName = "Consumer" };
         if (scope.IsSaga && key != OrbitMeshDefaultNames.SagaResponseMessageKey)
@@ -60,7 +60,7 @@ public sealed class ConsumerController(
         }
         catch (UnauthorizedAccessException)
         {
-            return Forbid();
+            return StatusCode(StatusCodes.Status403Forbidden);
         }
     }
 

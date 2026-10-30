@@ -49,7 +49,7 @@ public sealed class OrbitMeshController(
     {
         if (!directory.CheckMessageAuthorization(GetAccessKey(), scope, key))
         {
-            return Forbid();
+            return StatusCode(StatusCodes.Status403Forbidden);
         }
         var sender = new MessageSender { Type = MessageSender.SenderType.OrbitMeshHttp, ConnectionId = null, FriendlyName = $"{GetHeader(OrbitMeshHeaderNames.EdgeName)}/{GetHeader(OrbitMeshHeaderNames.PackageName)}" };
         await OrbitMeshHub.SendMessageOnOrbitMesh(orbitmeshHub.Clients, packageGroupManager, consumerHub, consumerGroupManager, metrics, sender, scope, key, data);
@@ -83,7 +83,7 @@ public sealed class OrbitMeshController(
         }
         catch (UnauthorizedAccessException)
         {
-            return Forbid();
+            return StatusCode(StatusCodes.Status403Forbidden);
         }
     }
 
