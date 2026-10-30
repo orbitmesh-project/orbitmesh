@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
@@ -12,10 +13,11 @@ namespace OrbitMesh.Server.Controllers;
 /// Connect provider such as Authelia (see <see cref="OidcSetup"/>). Neither hands out anything the page's
 /// script can read, replacing the AccessKey cookie the Console used to keep. Machine callers (Edges,
 /// packages, dashboards) don't come through here - they keep presenting their AccessKey.
-/// Unauthenticated by necessity (AccessKeyAuthenticationMiddleware lets <c>/rest/auth</c> through), so
+/// Unauthenticated by necessity (the controller is <c>[AllowAnonymous]</c>), so
 /// everything here is bounded: login attempts count against the same IP lockout as AccessKey guesses.
 /// </summary>
 [ApiController]
+[AllowAnonymous]
 [Route("rest/auth")]
 public sealed class AuthController(
     IOptionsMonitor<OrbitMeshOptions> options,
@@ -27,7 +29,7 @@ public sealed class AuthController(
     OrbitMeshMetrics metrics,
     ILoggerFactory loggerFactory) : ControllerBase
 {
-    // Same "Audit" category as the Management API's changes (see AccessKeyAuthenticationMiddleware).
+    // Same "Audit" category as the Management API's changes (see OrbitMeshAuthorizationResultHandler).
     private readonly ILogger audit = loggerFactory.CreateLogger("Audit");
 
     public sealed record LoginRequest(string? Name, string? Password);

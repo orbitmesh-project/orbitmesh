@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using System.Security.Cryptography;
 using System.Text;
 using OrbitMesh.Server.Services;
@@ -10,8 +11,7 @@ namespace OrbitMesh.Server.Controllers;
 /// AccessKey: <c>POST rest/enroll</c> to record the attempt, then <c>GET
 /// rest/enroll/{instanceId}/status</c> every few seconds until an admin approves it from the Console's
 /// pending-edges list. Deliberately its own controller (not part of ManagementController, which sits
-/// behind AccessKeyAuthenticationMiddleware's Management gate) - see the matching bypass in that
-/// middleware for the <c>rest/enroll</c> prefix.
+/// behind the Management door) - it is marked <c>[AllowAnonymous]</c>.
 /// <para>Being unauthenticated, everything here is bounded and validated: InstanceId must be a GUID,
 /// text fields are length-capped, the registry caps total/per-IP entries, and every call carries the
 /// Edge's persisted <see cref="OrbitMeshHeaderNames.EnrollSecret"/> (only its hash is stored) - so
@@ -19,6 +19,7 @@ namespace OrbitMesh.Server.Controllers;
 /// approved key or to take over someone else's pending entry.</para>
 /// </summary>
 [ApiController]
+[AllowAnonymous]
 [Route("rest/enroll")]
 public sealed class EnrollmentController(IPendingEdgeRegistry pendingEdgeRegistry, IOrbitMeshDirectory directory, ILogger<EnrollmentController> logger) : ControllerBase
 {

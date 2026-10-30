@@ -7,7 +7,11 @@ using OrbitMesh.Server.Middleware;
 using OrbitMesh.Server.Providers;
 using OrbitMesh.Server.Services;
 using OrbitMesh.Updating;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Authorization.Policy;
 using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using OrbitMesh.Server.Security;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Options;
 using NLog.Extensions.Logging;
@@ -65,6 +69,26 @@ var updateClientUserAgent = $"OrbitMesh.Server-Updater/{typeof(Program).Assembly
 builder.Services.AddHttpClient(nameof(ReleaseServerClient)).ConfigureHttpClient(c => c.DefaultRequestHeaders.UserAgent.ParseAdd(updateClientUserAgent));
 builder.Services.AddHttpClient(nameof(ServerSelfUpdater)).ConfigureHttpClient(c => c.DefaultRequestHeaders.UserAgent.ParseAdd(updateClientUserAgent));
 builder.Services.AddHttpClient(nameof(StaticSiteUpdater)).ConfigureHttpClient(c => c.DefaultRequestHeaders.UserAgent.ParseAdd(updateClientUserAgent));
+
+// Authorization. Who is calling is worked out by OrbitMeshPolicyEvaluator, and only for the endpoints that ask for
+// authorization; a controller declares its door ([Authorize(Policy = ...Door)]), an action the scope it needs
+// ([RequiresScope]), and an endpoint that declares nothing is refused by the fallback policy - so a public endpoint is
+// one that says [AllowAnonymous], not one missing from a list somewhere. See Security/.
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddAuthorization(o =>
+{
+    o.AddPolicy(OrbitMeshPolicies.ManagementDoor, OrbitMeshPolicies.Door(OrbitMeshAccessType.Management));
+    o.AddPolicy(OrbitMeshPolicies.ControllerDoor, OrbitMeshPolicies.Door(OrbitMeshAccessType.Controller));
+    o.AddPolicy(OrbitMeshPolicies.OrbitMeshDoor, OrbitMeshPolicies.Door(OrbitMeshAccessType.OrbitMesh));
+    o.AddPolicy(OrbitMeshPolicies.PackageDownload, new AuthorizationPolicyBuilder().AddRequirements(new PackageDownloadRequirement()).Build());
+    o.FallbackPolicy = OrbitMeshPolicies.Door(OrbitMeshAccessType.OrbitMesh);
+});
+builder.Services.AddSingleton<IAuthorizationHandler, DoorHandler>();
+builder.Services.AddSingleton<IAuthorizationHandler, PackageDownloadHandler>();
+builder.Services.AddSingleton<IAuthorizationHandler, ScopeHandler>();
+builder.Services.Replace(ServiceDescriptor.Singleton<IAuthorizationPolicyProvider, OrbitMeshPolicyProvider>());
+builder.Services.Replace(ServiceDescriptor.Transient<IPolicyEvaluator, OrbitMeshPolicyEvaluator>());
+builder.Services.Replace(ServiceDescriptor.Singleton<IAuthorizationMiddlewareResultHandler, OrbitMeshAuthorizationResultHandler>());
 
 // Keep the wire format PascalCase (matching every C# model in this codebase) instead of
 // System.Text.Json's camelCase default - the console's JS reads properties like
@@ -183,7 +207,7 @@ app.Use(async (context, next) =>
 
 if (app.Environment.IsDevelopment())
 {
-    app.MapOpenApi();
+    app.MapOpenApi().AllowAnonymous();
 }
 
 // The console builds some URLs as `{origin}/` + `/rest/...`, producing a doubled leading slash. Collapse
@@ -208,9 +232,9 @@ app.UseRouting();
 
 var orbitmeshOptions = app.Services.GetRequiredService<IOptionsMonitor<OrbitMeshOptions>>().CurrentValue;
 
-// CORS must run here - before AccessKeyAuthenticationMiddleware - so that browser CORS preflight
+// CORS must run here - before authorization - so that browser CORS preflight
 // (OPTIONS) requests to /rest are short-circuited by the CORS middleware itself. If it ran later,
-// AccessKeyAuthenticationMiddleware would see a preflight (which never carries an AccessKey) and
+// authorization would see a preflight (which never carries an AccessKey) and
 // reject it with 403 before CORS ever got a chance to answer it, breaking cross-origin callers even
 // when their origin IS in AllowedOrigins. Skipped for any enabled FileServers path specifically:
 // browsers always treat @font-face loads as CORS-mode requests, even for same-origin URLs, and a
@@ -242,9 +266,10 @@ app.Use(async (context, next) =>
     await next(context);
 });
 
-// AccessKeyAuthenticationMiddleware enforces each entry's LocalhostOnly for its own assets, not just
-// the /rest and /signalr endpoints, so it must run before the static files below.
-app.UseMiddleware<AccessKeyAuthenticationMiddleware>();
+// A FileServers entry marked LocalhostOnly answers only the machine it runs on - for its own assets too, so this
+// must run before the static files below. (Static files are public otherwise; everything else is an endpoint,
+// authorized further down.)
+app.UseMiddleware<FileServerGateMiddleware>();
 
 foreach (var fileServer in orbitmeshOptions.FileServers.Where(fs => fs.Enable && Directory.Exists(fs.PhysicalPath)))
 {
@@ -269,12 +294,17 @@ foreach (var fileServer in orbitmeshOptions.FileServers.Where(fs => fs.Enable &&
     });
 }
 
-app.UseMiddleware<PackageFileMiddleware>();
+// Everything from here on is an endpoint and goes through authorization (static files above answered first).
+app.UseAuthorization();
 
-app.MapHub<OrbitMeshHub>("/signalr/hubs/" + OrbitMeshHubNames.OrbitMesh);
-app.MapHub<EdgeHub>("/signalr/hubs/" + OrbitMeshHubNames.Edge);
-app.MapHub<ConsumerHub>("/signalr/hubs/" + OrbitMeshHubNames.Consumer);
-app.MapHub<ControlHub>("/signalr/hubs/" + OrbitMeshHubNames.Control);
+app.MapMethods("/packages/{**file}", ["GET", "HEAD"], PackageFileEndpoint.Handle).RequireAuthorization(OrbitMeshPolicies.PackageDownload);
+
+// Hubs decide for themselves in OnConnectedAsync (with the right door for each, and by aborting the connection
+// rather than failing the negotiation, which is what the Edge and the SDKs expect), so they are not gated here.
+app.MapHub<OrbitMeshHub>("/signalr/hubs/" + OrbitMeshHubNames.OrbitMesh).AllowAnonymous();
+app.MapHub<EdgeHub>("/signalr/hubs/" + OrbitMeshHubNames.Edge).AllowAnonymous();
+app.MapHub<ConsumerHub>("/signalr/hubs/" + OrbitMeshHubNames.Consumer).AllowAnonymous();
+app.MapHub<ControlHub>("/signalr/hubs/" + OrbitMeshHubNames.Control).AllowAnonymous();
 
 // A client-side-routed SPA (FileServerOptions.IsSpa) needs any sub-path that isn't a real file
 // (e.g. /console-next/packages) to fall back to index.html so the router can resolve it - only
@@ -300,11 +330,17 @@ foreach (var spaFileServer in orbitmeshOptions.FileServers.Where(fs => fs.Enable
             context.Response.ContentType = "text/html";
             await using var stream = indexFile.CreateReadStream();
             await stream.CopyToAsync(context.Response.Body);
-        });
+        }).AllowAnonymous();
 }
 
 app.MapControllers();
-app.MapPrometheusScrapingEndpoint();
+app.MapPrometheusScrapingEndpoint().AllowAnonymous();
+
+// Whatever no endpoint above matches: an anonymous caller is refused (403, as it always was - the server doesn't
+// say which paths exist), a credential that gets through the door is told 404. Not for paths that look like files
+// (:nonfile): the static file middleware skips a request once an endpoint has matched it, so this must not match
+// the files of a FileServers site.
+app.MapFallback("{**path:nonfile}", () => Results.NotFound()).RequireAuthorization(OrbitMeshPolicies.OrbitMeshDoor);
 
 var telemetryItemManager = app.Services.GetRequiredService<OrbitMeshTelemetryItemManager>();
 telemetryItemManager.Initialize();

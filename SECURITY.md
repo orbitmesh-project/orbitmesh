@@ -36,6 +36,7 @@ Who can use which door:
 | `EdgeHub` | An Edge | Only the credential assigned to that Edge, with `edge:connect` | **No** | No | No |
 | `OrbitMeshHub`, `/rest/orbitmesh` | Packages | Only the credential assigned to that package (or its Edge), with `package:connect` | **No** | No | No |
 | `Developer` edge | Local development | A key holding `developer` | REST only | No | No |
+| `/packages/{file}` (package zips) | An Edge fetching its packages | The Edge's own credential (`EdgeName` = that Edge, `PackageName` = `Edge`, with `edge:connect`), or any key holding `packages:read` | With `packages:read` | With `packages:read` | With `packages:read` |
 
 Open **on purpose**, each bounded: `/rest/enroll` (an Edge asking to be approved), `/rest/management/setup/*`
 (first run only), `/rest/auth/*` (sign-in), static sites under a `FileServers` path, and `/metrics`
@@ -149,7 +150,7 @@ specific targets that action applies to, once the scope already allows it.
 
 Scopes are checked at two levels:
 
-1. **Connection-level** (`AccessKeyAuthenticationMiddleware` / `ControlHub.OnConnectedAsync`) - a
+1. **Door** (the controller's `[Authorize(Policy = ...Door)]` / `ControlHub.OnConnectedAsync`) - a
    coarse gate: does this credential hold *any* scope at all, for this connection family
    (Controller/live console, or Management/REST API)? This only rules out a credential with no
    business connecting to that family in the first place.

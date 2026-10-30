@@ -1,5 +1,7 @@
 # OrbitMesh
 
+[![Tests](https://github.com/orbitmesh-project/OrbitMesh/actions/workflows/test-orbitmesh-server.yml/badge.svg?branch=main)](https://github.com/orbitmesh-project/OrbitMesh/actions/workflows/test-orbitmesh-server.yml)
+
 A stateless, self-hosted hub for edge devices and home automation packages.
 
 Run small automation packages - weather feeds, network tools, smart-home integrations, anything

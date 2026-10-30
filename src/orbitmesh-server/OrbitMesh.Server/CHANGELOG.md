@@ -4,6 +4,41 @@ Format: [Keep a Changelog](https://keepachangelog.com/). Versions match `<Versio
 `OrbitMesh.Server.csproj`, which is what's reported to the update server (see
 `Services/ServerSelfUpdater.cs` and `Services/UpdateCheckService.cs`).
 
+## [1.4.1]
+
+### Security
+
+- **Package zips (`/packages/...`) are no longer downloadable by any enabled credential.** They used to sit behind the
+  same door as the Consumer API, so any credential - even one holding no scope at all - and any signed-in person could
+  fetch them by presenting `EdgeName: Consumer`. A download now needs either to come from an Edge itself (its own
+  declared name as `EdgeName`, `Edge` as `PackageName`, the credential assigned to it, holding `edge:connect` - what
+  both the .NET and the Python Edge already send, so no Edge or package needs rebuilding), or a caller let in at the
+  Management door who holds `packages:read`. A refused attempt with a key counts toward the IP lockout like any other.
+
+### Changed
+
+- **REST authorization now runs on ASP.NET's own model, with refusal by default.** The hand-written gate in front of
+  every request (`AccessKeyAuthenticationMiddleware`, with a list of paths it let through) is gone. A controller
+  declares its door (`[Authorize(Policy = "door:management" | "door:controller" | "door:orbitmesh")]`), an action the
+  scope it needs (`[RequiresScope(...)]`, now an ordinary `[Authorize]` policy), and an endpoint that declares
+  nothing is refused by a fallback policy: a public endpoint is one that says `[AllowAnonymous]` (sign-in, enrollment,
+  first-run setup, `/metrics`, the hubs, a static site's single-page-app fallback) instead of one missing from a list.
+  Who is calling is resolved once, only for the endpoints that ask, into a normal `ClaimsPrincipal` (name, kind, one
+  `scope` claim per scope held right now). The door rules themselves are unchanged and still live in one place
+  (`IOrbitMeshDirectory.CheckAccess`). The wire format - `EdgeName`/`PackageName`/`AccessKey` headers or query string,
+  the session cookie, status codes and bodies, the IP lockout, the audit log - is unchanged, and so is what the Edges,
+  the SDKs and the Console see.
+- Package downloads (`/packages/...`) are an endpoint behind the same door instead of a middleware.
+- A `FileServers` site marked `localhostOnly` now refuses every other address outright; before, a caller from elsewhere
+  fell through to the credential check. Anonymous requests to a path that looks like a file and matches no site (`/x.js`)
+  get 404 rather than 403.
+
+### Added
+
+- Tests that fail when the shape of the authorization drifts: the exact list of public endpoints, every endpoint
+  declaring a door, every Management action naming its scope, the fallback policy, scope refusals not counting as
+  guesses, static sites and `localhostOnly` (`PipelineTests`, `FileServerTests`).
+
 ## [1.4.0]
 
 ### Added

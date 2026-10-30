@@ -105,6 +105,7 @@ Les couches 4 et 5 suivent le même modèle à deux niveaux qu'AWS IAM : un scop
 | `EdgeHub` | Un process Edge | Seulement l'identifiant attribué à cet Edge, avec `edge:connect` | **Non** | Non | Non |
 | `OrbitMeshHub`, `/rest/orbitmesh` | Les packages | Seulement l'identifiant attribué à ce package (ou à son Edge), avec `package:connect` | **Non** | Non | Non |
 | L'edge `Developer` | Développement local | Une clé détenant `developer` | REST seulement | Non | Non |
+| `/packages/{file}` (zips de packages) | Un Edge qui récupère ses packages | L'identifiant de l'Edge lui-même (`EdgeName` = cet Edge, `PackageName` = `Edge`, avec `edge:connect`), ou toute clé détenant `packages:read` | Avec `packages:read` | Avec `packages:read` | Avec `packages:read` |
 
 Quelques portes sont ouvertes **volontairement**, chacune bornée : `/rest/enroll` (un Edge qui demande à être approuvé), `/rest/management/setup/*` (premier lancement uniquement), `/rest/auth/*` (connexion), les sites statiques sous un chemin `FileServers`, et `/metrics` (Prometheus). Ce que vous ne voulez pas public - `/metrics`, ou un site qui garde une clé dans son propre fichier de config - doit être derrière `localhostOnly`, votre reverse proxy ou un pare-feu.
 

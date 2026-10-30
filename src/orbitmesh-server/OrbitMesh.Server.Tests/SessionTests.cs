@@ -203,6 +203,25 @@ public sealed class SessionTests(ServerFixture server) : IClassFixture<ServerFix
     }
 
     [Fact]
+    public async Task A_state_changing_request_on_a_cookie_cannot_take_its_identity_from_the_url()
+    {
+        // The attack this rule exists for: a form on another site can post to this server (the browser attaches the
+        // cookie) and can write the URL, but it cannot set a header. So the identity must be in a header.
+        var api = server.CreateApi();
+        var token = await api.SignInAsync(Accounts.Admin.Name, Accounts.Admin.Password);
+        var cookieOnly = new Caller(EdgeName: null, PackageName: null, SessionToken: token);
+        const string identityInTheUrl = "?EdgeName=Management&PackageName=forged-form";
+
+        using var forged = await api.PostAsync("rest/management/configuration/recoveryoptions" + identityInTheUrl, cookieOnly, new { });
+        using var read = await api.GetAsync("rest/management/CheckAccess" + identityInTheUrl, cookieOnly);
+
+        Assert.Equal(HttpStatusCode.Forbidden, forged.StatusCode);
+        Assert.Equal("Forbidden", await forged.Content.ReadAsStringAsync());
+        // Reading is not state-changing, and the cookie's origin check still applies to it.
+        Assert.Equal(HttpStatusCode.OK, read.StatusCode);
+    }
+
+    [Fact]
     public async Task A_cookie_is_refused_on_a_request_from_another_origin()
     {
         var api = server.CreateApi();

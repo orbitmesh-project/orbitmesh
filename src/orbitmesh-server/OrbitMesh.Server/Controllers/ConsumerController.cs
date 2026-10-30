@@ -1,3 +1,5 @@
+using Microsoft.AspNetCore.Authorization;
+using OrbitMesh.Server.Security;
 using OrbitMesh.Server.Hubs;
 using OrbitMesh.Server.Services;
 using Microsoft.AspNetCore.Mvc;
@@ -6,6 +8,7 @@ using Microsoft.AspNetCore.SignalR;
 namespace OrbitMesh.Server.Controllers;
 
 [ApiController]
+[Authorize(Policy = OrbitMeshPolicies.OrbitMeshDoor)]
 [Route("rest/consumer")]
 public sealed class ConsumerController(
     IOrbitMeshDirectory directory,
@@ -64,6 +67,6 @@ public sealed class ConsumerController(
         }
     }
 
-    // Set by AccessKeyAuthenticationMiddleware: the presented AccessKey, or the Console's session.
+    // Set by OrbitMeshPolicyEvaluator: the presented AccessKey, or the Console's session.
     private string? GetAccessKey() => HttpContext.GetEffectiveAccessKey();
 }

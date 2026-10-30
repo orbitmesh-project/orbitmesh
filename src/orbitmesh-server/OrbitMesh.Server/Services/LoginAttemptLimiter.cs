@@ -4,7 +4,7 @@ using System.Net;
 namespace OrbitMesh.Server.Services;
 
 /// <summary>
-/// Brute-force protection for AccessKeyAuthenticationMiddleware, keyed by remote IP rather than by
+/// Brute-force protection for the REST authorization (OrbitMeshAuthorizationResultHandler), keyed by remote IP rather than by
 /// credential name - a failed attempt's presented key doesn't reliably identify which credential is
 /// being guessed at, but the source of repeated failures is always known. Purely in-memory: a restart
 /// clears it, which is an acceptable trade for not persisting attacker IPs into appsettings.json.

@@ -15,7 +15,7 @@ internal static class HubAttemptGuard
     public static void RecordFailure(this HubCallerContext context, LoginAttemptLimiter limiter, ILogger logger)
     {
         // A connection that presented no AccessKey (e.g. the Console reconnecting on an expired session
-        // cookie) isn't guessing anything - see AccessKeyAuthenticationMiddleware.
+        // cookie) isn't guessing anything - see OrbitMeshAuthorizationResultHandler.
         if (context.Items.TryGetValue(HubContextExtensions.PresentedAccessKeyItem, out var presented) && presented is false)
         {
             return;

@@ -1,32 +1,17 @@
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Mvc.Filters;
+using Microsoft.AspNetCore.Authorization;
+using OrbitMesh.Server.Security;
 
 namespace OrbitMesh.Server.Services;
 
 /// <summary>
-/// Per-endpoint authorization for ManagementController actions - the credential resolved from the
-/// request's AccessKey must hold at least one of the listed scopes (see OrbitMeshScope). This is the
-/// fine-grained layer beneath AccessKeyAuthenticationMiddleware's coarse "is this credential
-/// Management-capable at all" gate (IOrbitMeshDirectory.CanAccess): the middleware decides whether the
-/// request reaches this controller at all, this attribute decides whether it reaches this specific
-/// action. Resolves services from HttpContext.RequestServices rather than constructor injection so it
-/// can be used as a plain attribute (`[RequiresScope(...)]`) instead of `[TypeFilter]`.
+/// Per-endpoint authorization for the Management API's actions - the caller must hold at least one of the listed
+/// scopes (see OrbitMeshScope). It is an ordinary <see cref="AuthorizeAttribute"/> whose policy is "one of these
+/// scopes": the controller's own door policy decides whether the request reaches the controller at all (is this
+/// credential Management-capable, is this session allowed on this door), this attribute decides whether it reaches
+/// this specific action.
 /// </summary>
 [AttributeUsage(AttributeTargets.Method)]
-public sealed class RequiresScopeAttribute(params string[] anyOf) : Attribute, IAsyncActionFilter
+public sealed class RequiresScopeAttribute : AuthorizeAttribute
 {
-    public async Task OnActionExecutionAsync(ActionExecutingContext context, ActionExecutionDelegate next)
-    {
-        var directory = context.HttpContext.RequestServices.GetRequiredService<IOrbitMeshDirectory>();
-        var credential = directory.FindCredential(context.HttpContext.GetEffectiveAccessKey());
-        if (credential == null || !anyOf.Any(credential.Scopes.Contains))
-        {
-            context.Result = new ObjectResult($"Forbidden: this action requires the '{string.Join("' or '", anyOf)}' scope.")
-            {
-                StatusCode = StatusCodes.Status403Forbidden
-            };
-            return;
-        }
-        await next();
-    }
+    public RequiresScopeAttribute(params string[] anyOf) => Policy = OrbitMeshPolicies.ForScopes(anyOf);
 }

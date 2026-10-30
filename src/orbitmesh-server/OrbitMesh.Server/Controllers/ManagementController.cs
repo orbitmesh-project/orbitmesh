@@ -1,3 +1,6 @@
+using Microsoft.AspNetCore.Authorization;
+using AuthorizationOptions = OrbitMesh.Server.Configuration.AuthorizationOptions;
+using OrbitMesh.Server.Security;
 using System.IO.Compression;
 using System.Net;
 using System.Net.Sockets;
@@ -24,6 +27,7 @@ public sealed record NuGetPackageUpdateStatus(string PackageFile, string Feed, s
 /// the Console's JS client (Scripts/management-api.js) calls these exact paths and payload shapes.
 /// </summary>
 [ApiController]
+[Authorize(Policy = OrbitMeshPolicies.ManagementDoor)]
 [Route("rest/management")]
 public sealed class ManagementController(
     IOptionsMonitor<OrbitMeshOptions> options,
@@ -135,7 +139,7 @@ public sealed class ManagementController(
     }
 
     // Paths a FileServers entry must never claim: they're the API/hub/metrics routes themselves, and the
-    // authentication middleware lets any FileServers path straight through unauthenticated.
+    // the static files are served before authorization, with no AccessKey at all.
     private static readonly string[] ReservedFileServerPaths = ["/rest", "/signalr", "/metrics", "/openapi", "/packages"];
 
     [HttpPost("configuration")]
@@ -1192,15 +1196,17 @@ public sealed class ManagementController(
     // updated together with the Server can still finish the first-run setup.
     public sealed record CreateAdminRequest(string Name, string? Password = null, string? AccessKey = null);
 
-    // Unauthenticated by design (see AccessKeyAuthenticationMiddleware's bypass list) - there is no
+    // Unauthenticated by design ([AllowAnonymous] on both, and listed in PipelineTests) - there is no
     // credential yet to authenticate with on a fresh install. NeedsSetup flips to false the moment the
     // first credential exists, so this pair of endpoints is only ever usable once per install. With single
     // sign-on enabled there is nothing to set up: the identity provider's groups decide who administers.
     [HttpGet("setup/status")]
+    [AllowAnonymous]
     public ActionResult<SetupStatus> GetSetupStatus() =>
         new SetupStatus(options.CurrentValue.Credentials.Count == 0 && !options.CurrentValue.Auth.Oidc.IsUsable);
 
     [HttpPost("setup/create-admin")]
+    [AllowAnonymous]
     public IActionResult CreateAdmin([FromBody] CreateAdminRequest request)
     {
         var secret = !string.IsNullOrEmpty(request.Password) ? request.Password : request.AccessKey;

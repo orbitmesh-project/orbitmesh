@@ -104,6 +104,7 @@ Layers 4 and 5 are the same two-level model as AWS IAM: a scope authorizes an *a
 | `EdgeHub` | An Edge process | Only the credential assigned to that Edge, with `edge:connect` | **No** | No | No |
 | `OrbitMeshHub`, `/rest/orbitmesh` | Packages | Only the credential assigned to that package (or its Edge), with `package:connect` | **No** | No | No |
 | The `Developer` edge | Local development | A key holding `developer` | REST only | No | No |
+| `/packages/{file}` (package zips) | An Edge fetching its packages | The Edge's own credential (`EdgeName` = that Edge, `PackageName` = `Edge`, with `edge:connect`), or any key holding `packages:read` | With `packages:read` | With `packages:read` | With `packages:read` |
 
 A few doors are open **on purpose**, each bounded: `/rest/enroll` (an Edge asking to be approved), `/rest/management/setup/*` (first run only), `/rest/auth/*` (sign-in), static sites under a `FileServers` path, and `/metrics` (Prometheus). Anything you don't want public - `/metrics`, or a site that stores a key in its own config file - belongs behind `localhostOnly`, your reverse proxy or a firewall.
 

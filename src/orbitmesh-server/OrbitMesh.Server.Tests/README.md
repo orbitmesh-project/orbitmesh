@@ -25,6 +25,8 @@ which identity opens which door. The tests are that table, executable:
 | `VariantServerTests` | First-run setup, local sign-in off, single sign-on off or removed |
 | `HubTests` | SignalR hubs accept and refuse the same callers as the REST doors |
 | `AuthorizationRulesTests` | Per-credential rules for messages, groups and telemetry items |
+| `PipelineTests` | The shape of the authorization: the exact list of public endpoints, a door on every other one, a scope on every Management action, refusal by default, who may download a package zip |
+| `FileServerTests` | Static sites are public, `localhostOnly` ones answer only the local machine, credentials are never looked at there |
 | `ApiTokenTests` | API tokens: format, hash-only storage, doors, expiry, revocation, rotation, delegation, configuration-editor guards |
 | `MetricsTests` | The public `/metrics` endpoint keeps working once there is traffic |
 | `SecurityPartsTests` | Password hashing, role mapper, session store, key cipher |
@@ -38,6 +40,13 @@ fails the run if they have changed afterwards. Each client also gets its own fak
 test's failed attempts can never lock another out.
 
 A test that changes an account uses one reserved for it (see `Harness/Accounts`); do the same when adding one.
+
+## Adding an endpoint
+
+A controller declares its door (`[Authorize(Policy = OrbitMeshPolicies.ManagementDoor)]`, `ControllerDoor` or
+`OrbitMeshDoor`), each Management action the scope it needs (`[RequiresScope(...)]`), and a public one says
+`[AllowAnonymous]`. `PipelineTests` fails until you have decided: an endpoint that is public, or a Management
+action without a scope, has to be added to its allow-list on purpose.
 
 ## Known limits
 
