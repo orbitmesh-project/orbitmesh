@@ -9,6 +9,7 @@ import PackageRepository from "../Pages/PackageRepository.js";
 import TelemetryItems from "../Pages/TelemetryItems.js";
 import MessageHandlers from "../Pages/MessageHandlers.js";
 import Credentials from "../Pages/Credentials.js";
+import SingleSignOn from "../Pages/SingleSignOn.js";
 import ConfigurationEditor from "../Pages/ConfigurationEditor.js";
 import ScheduledTasks from "../Pages/ScheduledTasks.js";
 
@@ -25,6 +26,7 @@ const routes = [
     { path: "/telemetry", component: TelemetryItems },
     { path: "/messages", component: MessageHandlers },
     { path: "/credentials", component: Credentials },
+    { path: "/sso", component: SingleSignOn },
     { path: "/configuration", component: ConfigurationEditor },
     { path: "/scheduledtasks", component: ScheduledTasks }
 ];

@@ -4,6 +4,17 @@ Format: [Keep a Changelog](https://keepachangelog.com/). Versions match `<Versio
 `OrbitMesh.Server.csproj`, which is what's reported to the update server (see
 `Services/ServerSelfUpdater.cs` and `Services/UpdateCheckService.cs`).
 
+## [1.3.1]
+
+Single sign-on can be set up from the Console (Administration → Single sign-on, Console 1.3.1).
+
+### Changed
+
+- `Auth:Oidc:DisplayName` (the name in the Console's "Sign in with ..." button) defaults to `SSO` instead of
+  "Single sign-on". An install that never set it now shows "Sign in with SSO".
+- The configuration endpoint refuses a change that turns `Auth:LocalLoginEnabled` off while single sign-on
+  isn't enabled and complete (authority, client ID, client secret), which would leave no way to sign in.
+
 ## [1.3.0]
 
 Console sign-in reworked: server-side sessions instead of a replayable key, and single sign-on through an

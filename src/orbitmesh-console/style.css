@@ -54,6 +54,8 @@ main { padding: 20px; flex: 1; }
 .login-box label { display: block; margin-bottom: 12px; }
 .login-box input { width: 100%; padding: 6px; margin-top: 4px; background: var(--bg); border: 1px solid var(--border); color: inherit; border-radius: 4px; }
 .login-box button { width: 100%; padding: 8px; background: var(--accent); border: none; border-radius: 4px; color: var(--accent-text); font-weight: 600; cursor: pointer; }
+.login-box button.secondary { background: transparent; border: 1px solid var(--border); color: inherit; }
+.login-box .login-or { text-align: center; margin: 12px 0; }
 .error { color: var(--danger-bg); }
 .success-text { color: var(--success-bg); }
 .muted { color: var(--text-muted); }
@@ -244,6 +246,12 @@ nav a.router-link-active { color: var(--text); background: var(--border); }
 .deploy-form h3 { width: 100%; margin: 0 0 4px 0; color: var(--text-muted); font-weight: 500; }
 .deploy-form select, .deploy-form input[type=text], .deploy-form input:not([type]) { background: var(--bg); border: 1px solid var(--border); color: inherit; padding: 5px 8px; border-radius: 4px; }
 
+.sso-form { flex-direction: column; align-items: stretch; }
+.sso-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-weight: normal; }
+.sso-row > input:not([type=checkbox]) { min-width: 200px; }
+.sso-row > .sso-wide { min-width: 320px; }
+.sso-mapping { border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; display: flex; flex-direction: column; gap: 8px; }
+.sso-mapping-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .scope-matrix { display: flex; flex-wrap: wrap; gap: 16px; width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 10px 14px; }
 .scope-group { display: flex; flex-direction: column; gap: 3px; min-width: 130px; }
 .scope-group strong { font-size: 0.75em; text-transform: uppercase; color: var(--text-muted); margin-bottom: 2px; }

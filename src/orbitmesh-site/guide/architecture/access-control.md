@@ -243,7 +243,7 @@ identity_providers:
         token_endpoint_auth_method: client_secret_post
 ```
 
-**2. Configure the Server** (`appsettings.json`, section `OrbitMesh`):
+**2. Configure the Server.** In the Console, open **Administration → Single sign-on**: it has every setting below, shows the redirect URI to register at the provider, and keeps the client secret masked. Or edit `appsettings.json` (section `OrbitMesh`) by hand:
 
 ```json
 "auth": {
@@ -261,7 +261,7 @@ identity_providers:
 }
 ```
 
-`clientSecret` can also come from the `OrbitMesh__Auth__Oidc__ClientSecret` environment variable. Restart the Server after changing the provider settings.
+`displayName` is the name in the sign-in button ("Sign in with Authelia"; "SSO" if left out). `clientSecret` can also come from the `OrbitMesh__Auth__Oidc__ClientSecret` environment variable. Restart the Server after changing the provider settings; role mappings apply immediately.
 
 **Who gets what.** A user is given the union of the scopes of every mapping whose `group` they belong to (`"*"` means every scope); a user in none of them is refused. Mappings are read live, so editing one applies to sessions already open. These users appear as `oidc:<login>` in the audit log, have no credential entry, and are not subject to per-credential `authorizations` rules (scopes are the gate).
 

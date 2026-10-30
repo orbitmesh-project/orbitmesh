@@ -244,7 +244,7 @@ identity_providers:
         token_endpoint_auth_method: client_secret_post
 ```
 
-**2. Configurer le Server** (`appsettings.json`, section `OrbitMesh`) :
+**2. Configurer le Server.** Dans la Console, ouvrez **Administration → Single sign-on** : tous les réglages ci-dessous y sont, avec l'URI de redirection à déclarer chez le fournisseur, et le secret client reste masqué. Ou éditez `appsettings.json` (section `OrbitMesh`) à la main :
 
 ```json
 "auth": {
@@ -262,7 +262,7 @@ identity_providers:
 }
 ```
 
-`clientSecret` peut aussi venir de la variable d'environnement `OrbitMesh__Auth__Oidc__ClientSecret`. Redémarrez le Server après avoir modifié les réglages du fournisseur.
+`displayName` est le nom affiché dans le bouton de connexion (« Sign in with Authelia » ; « SSO » si omis). `clientSecret` peut aussi venir de la variable d'environnement `OrbitMesh__Auth__Oidc__ClientSecret`. Redémarrez le Server après avoir modifié les réglages du fournisseur ; les correspondances de rôles, elles, s'appliquent tout de suite.
 
 **Qui obtient quoi.** Un utilisateur reçoit l'union des scopes de chaque correspondance dont il est membre du `group` (`"*"` = tous les scopes) ; un utilisateur dans aucun d'eux est refusé. Les correspondances sont lues à chaud : en modifier une s'applique aux sessions déjà ouvertes. Ces utilisateurs apparaissent sous `oidc:<login>` dans le journal d'audit, n'ont pas d'entrée d'identifiant, et ne sont pas soumis aux règles `authorizations` par identifiant (les scopes font foi).
 

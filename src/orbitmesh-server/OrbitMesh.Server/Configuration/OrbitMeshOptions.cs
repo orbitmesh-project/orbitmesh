@@ -79,8 +79,8 @@ public sealed class OidcOptions
 {
     public bool Enable { get; set; }
 
-    /// <summary>Label of the Console's sign-in button.</summary>
-    public string DisplayName { get; set; } = "Single sign-on";
+    /// <summary>Name of the provider in the Console's sign-in button ("Sign in with &lt;DisplayName&gt;").</summary>
+    public string DisplayName { get; set; } = "SSO";
 
     /// <summary>The provider's issuer URL, e.g. "https://auth.example.com" (its /.well-known/openid-configuration is read).</summary>
     public string Authority { get; set; } = string.Empty;

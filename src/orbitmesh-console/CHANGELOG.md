@@ -3,6 +3,24 @@
 Format: [Keep a Changelog](https://keepachangelog.com/). Versions match the `VERSION` file at
 the root of this project, bumped by `cicd/release-static-site.ps1`.
 
+## [1.3.1]
+
+Works with Server 1.3.0, but update the Server first: only 1.3.1 also refuses, on its side, to turn local
+sign-in off while single sign-on isn't complete.
+
+### Added
+
+- **Administration → Single sign-on** page to set the provider up without editing `appsettings.json`:
+  authority, client ID and secret (masked), button label, claims, role mappings (administrator, read-only
+  or a custom list of scopes per provider group), session durations and local sign-in. It shows the redirect
+  URI to register at the provider, and refuses to turn local sign-in off while single sign-on isn't complete.
+  Needs `configuration:read` / `configuration:write`.
+
+### Changed
+
+- The "Sign in with <provider>" button now sits under the password form (separated by "or", as a secondary
+  button) instead of above it, and reads "Sign in with SSO" when the provider has no name configured.
+
 ## [1.3.0]
 
 ### Changed
@@ -18,8 +36,9 @@ the root of this project, bumped by `cicd/release-static-site.ps1`.
 ### Added
 
 - **Single sign-on**: when the Server has an OpenID Connect provider configured (e.g. Authelia), the sign-in
-  page offers "Sign in with <provider>" next to the password form, and says why when the provider refused
-  the user or the exchange failed. The password form is hidden if the Server turns local sign-in off.
+  page offers "Sign in with <provider>" next to the password
+  form, and says why when the provider refused the user or the exchange failed. The password form is hidden
+  if the Server turns local sign-in off.
 
 ### Fixed
 

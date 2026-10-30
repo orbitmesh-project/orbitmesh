@@ -90,17 +90,17 @@ export default {
             </template>
             <template v-else>
                 <p v-if="error" class="error">{{ error }}</p>
-                <div v-if="oidc.Enabled" style="margin-bottom: 12px;">
-                    <button type="button" @click="signInWithProvider">Sign in with {{ oidc.DisplayName }}</button>
-                </div>
                 <form v-if="localLoginEnabled || needsSetup" @submit.prevent="submit">
-                    <p v-if="oidc.Enabled" class="muted">Or with a local account:</p>
                     <p v-if="needsSetup" class="muted">No account exists yet - create the admin account.</p>
                     <label>Username <input v-model="username" autocomplete="username" /></label>
                     <label>Password <input v-model="password" type="password" :autocomplete="needsSetup ? 'new-password' : 'current-password'" /></label>
                     <label v-if="needsSetup">Confirm password <input v-model="confirmPassword" type="password" autocomplete="new-password" /></label>
                     <button type="submit" :disabled="submitting">{{ submitting ? 'Signing in...' : (needsSetup ? 'Create admin account' : 'Sign in') }}</button>
                 </form>
+                <template v-if="oidc.Enabled">
+                    <p v-if="localLoginEnabled || needsSetup" class="login-or muted">or</p>
+                    <button type="button" class="secondary" @click="signInWithProvider">Sign in with {{ oidc.DisplayName || 'SSO' }}</button>
+                </template>
             </template>
         </div>
     `

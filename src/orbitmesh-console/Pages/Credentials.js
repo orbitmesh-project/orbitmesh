@@ -7,7 +7,7 @@ const emptyCredential = () => ({ Name: "", AccessKey: "", Kind: "Machine", Enabl
 // Named permission scopes (see OrbitMesh.Server's OrbitMeshScope) grouped for the matrix below - each
 // entry is one scope a credential can be granted, explicit and individually-grantable (PAT-style,
 // like GitHub's token scopes).
-const scopeCatalog = [
+export const scopeCatalog = [
     { category: "Edges", scopes: [
         { value: "edges:read", label: "Read", description: "View edges and their live connection state." },
         { value: "edges:write", label: "Write", description: "Add, remove or restart edges." },

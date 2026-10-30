@@ -22,7 +22,7 @@ const App = {
             return ["/edges", "/packages", "/variables"].includes(this.$route.path);
         },
         administrationGroupActive() {
-            return ["/repository", "/credentials", "/configuration", "/scheduledtasks"].includes(this.$route.path);
+            return ["/repository", "/credentials", "/sso", "/configuration", "/scheduledtasks"].includes(this.$route.path);
         }
     },
     methods: {
@@ -68,6 +68,7 @@ const App = {
                         <div class="nav-dropdown">
                             <router-link to="/repository">Repository</router-link>
                             <router-link to="/credentials">Credentials</router-link>
+                            <router-link to="/sso">Single sign-on</router-link>
                             <router-link to="/configuration">Configuration</router-link>
                             <router-link to="/scheduledtasks">Scheduled Tasks</router-link>
                         </div>

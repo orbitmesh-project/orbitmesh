@@ -227,6 +227,11 @@ public sealed class ManagementController(
     // above refuse: credentials (delegation + no plaintext keys) and FileServers paths.
     private IActionResult? CheckConfigurationChange(OrbitMeshOptions current, OrbitMeshOptions candidate)
     {
+        // Turning local sign-in off while single sign-on can't work would leave no way into the Console.
+        if (!candidate.Auth.LocalLoginEnabled && !candidate.Auth.Oidc.IsUsable)
+        {
+            return BadRequest("Local sign-in can't be turned off unless single sign-on is enabled with an authority, a client ID and a client secret - otherwise nobody could sign in.");
+        }
         foreach (var credential in candidate.Credentials)
         {
             var existing = current.Credentials.FirstOrDefault(c => c.Name.Equals(credential.Name, StringComparison.OrdinalIgnoreCase));
